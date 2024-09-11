@@ -1,0 +1,83 @@
+const Barangay = require('../../models/barangay/barangayModel');
+
+// Create a new barangay
+const createBarangay = async (req, res) => {
+    try {
+        // Check if any barangay already exists
+        const existingBarangay = await Barangay.findOne();
+        if (existingBarangay) {
+            return res.status(400).json({ message: 'A Barangay already exists. Only one Barangay can be created.' });
+        }
+
+        // Create a new barangay with no officials assigned initially
+        const { barangayName, city } = req.body;
+        const newBarangay = new Barangay({
+            barangayName,
+            city,
+            // No need to assign barangayCaptain, barangaySecretary, or barangayKagawad at this stage
+        });
+
+        await newBarangay.save();
+        res.json({ barangay: newBarangay, message: 'Barangay created successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Something went wrong', error });
+    }
+};
+
+
+// Get all barangays
+const getAllBarangays = async (req, res) => {
+    try {
+        const barangays = await Barangay.find();
+        res.json({ barangays });
+    } catch (error) {
+        res.status(500).json({ message: 'Something went wrong', error });
+    }
+};
+
+// Get a barangay by ID
+const getBarangayById = async (req, res) => {
+    try {
+        const barangay = await Barangay.findById(req.params.id);
+        if (!barangay) {
+            return res.status(404).json({ message: 'Barangay not found' });
+        }
+        res.json({ barangay });
+    } catch (error) {
+        res.status(500).json({ message: 'Something went wrong', error });
+    }
+};
+
+// Update a barangay by ID
+const updateBarangayById = async (req, res) => {
+    try {
+        const barangay = await Barangay.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+        if (!barangay) {
+            return res.status(404).json({ message: 'Barangay not found' });
+        }
+        res.json({ barangay, message: 'Barangay updated successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Something went wrong', error });
+    }
+};
+
+// Delete a barangay by ID
+const deleteBarangayById = async (req, res) => {
+    try {
+        const barangay = await Barangay.findByIdAndDelete(req.params.id);
+        if (!barangay) {
+            return res.status(404).json({ message: 'Barangay not found' });
+        }
+        res.json({ barangay, message: 'Barangay deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Something went wrong', error });
+    }
+};
+
+module.exports = {
+    createBarangay,
+    getAllBarangays,
+    getBarangayById,
+    updateBarangayById,
+    deleteBarangayById
+};
