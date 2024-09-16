@@ -126,7 +126,6 @@ const addNewResident = async (req, res) => {
         const validIDs = req.files && req.files.validIDs ? req.files.validIDs.map(file => file.path) : [];
 
         // Check for missing required fields
-        if (!email) return res.status(400).json({ message: 'Email is required' });
         if (!firstName) return res.status(400).json({ message: 'First name is required' });
         if (!lastName) return res.status(400).json({ message: 'Last name is required' });
         if (!birthday) return res.status(400).json({ message: 'Birthday is required' });
@@ -139,9 +138,11 @@ const addNewResident = async (req, res) => {
         if (!roleinHousehold) return res.status(400).json({ message: 'Role in Household is required' });
 
         // Check if resident already exists
-        const existingResident = await Resident.findOne({ email });
-        if (existingResident) {
-            return res.status(400).json({ message: 'Resident with this email already exists' });
+        if (email) {
+            const existingResident = await Resident.findOne({ email });
+            if (existingResident) {
+                return res.status(400).json({ message: 'Resident with this email already exists' });
+            }
         }
 
         // Fetch the barangay information
@@ -150,10 +151,13 @@ const addNewResident = async (req, res) => {
             return res.status(404).json({ message: 'No barangay found' });
         }
 
-        // Create password and new resident
-        const currentYear = new Date().getFullYear();
-        const sanitizedLastName = lastName.replace(/\s+/g, '').toLowerCase();
-        const password = `${currentYear}${sanitizedLastName}${firstName.charAt(0).toLowerCase()}${middleName ? middleName.charAt(0).toLowerCase() : ''}`;
+        // Create password if email is provided
+        let password;
+        if (email) {
+            const currentYear = new Date().getFullYear();
+            const sanitizedLastName = lastName.replace(/\s+/g, '').toLowerCase();
+            password = `${currentYear}${sanitizedLastName}${firstName.charAt(0).toLowerCase()}${middleName ? middleName.charAt(0).toLowerCase() : ''}`;
+        }
 
         const newResident = new Resident({
             email,
@@ -233,12 +237,15 @@ const addNewResident = async (req, res) => {
             newResident.householdID = newHousehold._id;
             await newResident.save();
         }
-        // Send verification email
-        await sendVerificationEmail(newResident, req);
+
+        // Send verification email if email is provided
+        if (email) {
+            await sendVerificationEmail(newResident, req);
+        }
 
         // Send success response with newResident object
         if (!res.headersSent) {
-            return res.status(201).json({ newResident, message: 'Resident added. Verification email sent.' });
+            return res.status(201).json({ newResident, message: 'Resident added successfully.' });
         }
 
     } catch (err) {
@@ -250,7 +257,6 @@ const addNewResident = async (req, res) => {
         }
     }
 };
-
 
 // Approve a resident
 const approveResident = async (req, res) => {

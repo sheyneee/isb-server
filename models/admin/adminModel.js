@@ -5,7 +5,7 @@ const moment = require('moment');
 
 const adminSchema = new mongoose.Schema({
     adminID: { 
-        type: Number, 
+        type: String, 
         unique: true 
     },
     profilepic: String,
@@ -181,10 +181,24 @@ adminSchema.pre('save', async function(next) {
                 return next(new Error('No Barangay found to assign'));
             }
             this.barangay = barangay._id;
-            const maxAdmin = await this.constructor.findOne().sort('-adminID').exec();
-            this.adminID = maxAdmin ? maxAdmin.adminID + 1 : 1;
+
+            const currentYear = new Date().getFullYear();
+            const latestAdmin = await this.constructor.findOne({ adminID: new RegExp(`^O-${currentYear}-\\d{4}$`) })
+                .sort({ adminID: -1 })
+                .exec();
+
+            let newIncrement;
+            if (latestAdmin) {
+                const lastIncrement = parseInt(latestAdmin.adminID.split('-')[2], 10);
+                newIncrement = lastIncrement + 1;
+            } else {
+                newIncrement = 1;
+            }
+            const incrementString = String(newIncrement).padStart(4, '0');
+            this.adminID = `O-${currentYear}-${incrementString}`;
         }
 
+        // Calculate age dynamically
         const now = moment();
         const birthDate = moment(this.birthday);
         this.age = now.diff(birthDate, 'years');
@@ -195,6 +209,7 @@ adminSchema.pre('save', async function(next) {
         next(error);
     }
 });
+
 
 adminSchema.pre('findOneAndUpdate', async function(next) {
     const update = this.getUpdate();

@@ -8,6 +8,18 @@ const barangaySchema = new mongoose.Schema({
         default: '52 - IPIL', 
         immutable: true 
     },
+    region: {
+        type: String,
+        required: [true, 'Region is required'],
+        default: 'IV-A CALABARZON', 
+        immutable: true 
+    },
+    region: {
+        type: String,
+        required: [true, 'Province'],
+        default: 'Cavite', 
+        immutable: true 
+    },
     city: {
         type: String,
         required: [true, 'City is required'],

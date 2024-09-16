@@ -5,12 +5,11 @@ const moment = require('moment');
 
 const residentSchema = new mongoose.Schema({
     residentID: {
-        type: Number,
+        type: String,
         unique: true
     },
     email: {
         type: String,
-        required: [true, 'Email is required'],
         unique: true,
         trim: true,
         lowercase: true
@@ -21,7 +20,6 @@ const residentSchema = new mongoose.Schema({
     },
     password: {
         type: String,
-        required: [true, 'Password is required']
     },
     profilepic: String,
     firstName: {
@@ -57,7 +55,6 @@ const residentSchema = new mongoose.Schema({
     },
     contactNumber: {
         type: String,
-        required: [true, 'Contact Number is required']
     },
     permanentAddress: {
         street: {
@@ -87,7 +84,12 @@ const residentSchema = new mongoose.Schema({
         houseNo: {
             type: String,
         },
-        subdivision: String
+        subdivision: String,
+        barangay: String,
+        city: String,
+        province: String,
+        region: String,
+        postalcode: String,
     },
     nationality: {
         type: String,
@@ -193,9 +195,22 @@ residentSchema.pre('save', async function(next) {
                 return next(new Error('No Barangay found to assign'));
             }
             this.barangay = barangay._id;
+            const currentYear = new Date().getFullYear();
 
-            const maxResident = await this.constructor.findOne().sort('-residentID').exec();
-            this.residentID = maxResident ? maxResident.residentID + 1 : 1;
+            const latestResident = await this.constructor.findOne({ residentID: new RegExp(`^R-${currentYear}-\\d{4}$`) })
+                .sort({ residentID: -1 })
+                .exec();
+            let newIncrement;
+
+            if (latestResident) {
+                const lastIncrement = parseInt(latestResident.residentID.split('-')[2], 10);
+                newIncrement = lastIncrement + 1;
+            } else {
+                newIncrement = 1;
+            }
+
+            const incrementString = String(newIncrement).padStart(4, '0');
+            this.residentID = `R-${currentYear}-${incrementString}`;
         }
 
         // Calculate age dynamically
@@ -209,6 +224,7 @@ residentSchema.pre('save', async function(next) {
         next(error);
     }
 });
+
 
 // Pre-update middleware to handle dynamic age calculation on update
 residentSchema.pre('findOneAndUpdate', async function(next) {

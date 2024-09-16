@@ -124,10 +124,27 @@ const getHouseholdMembers = async (req, res) => {
     }
 };
 
+const getAllHouseholds = async (req, res) => {
+    try {
+        const households = await Household.find()
+            .populate({
+                path: 'householdHead',
+                select: 'firstName middleName lastName contactNumber sex civilStatus permanentAddress'
+            })
+            .populate('members', 'residentID firstName middleName lastName sex age roleinHousehold contactNumber');
+
+        res.json({ households });
+    } catch (error) {
+        console.error('Error fetching households:', error);
+        res.status(500).json({ message: 'Something went wrong', error });
+    }
+};
+
 module.exports = {
     updateHousehold,
     getHouseholdById,
     archiveHousehold,
     getHouseholdByNumber,
     getHouseholdMembers,
+    getAllHouseholds,
 };
