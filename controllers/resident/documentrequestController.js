@@ -1,25 +1,16 @@
-const { BlobServiceClient } = require('@azure/storage-blob');
+const AWS = require('aws-sdk');
 const DocumentRequest = require('../../models/resident/documentrequestModel');
 const Resident = require('../../models/resident/residentModel');
 const Admin = require('../../models/admin/adminModel');
 const mongoose = require('mongoose');
 const multer = require('multer');
 
-// Azure Blob Storage setup
-const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
-const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
-const containerName = 'iservebarangay';  // Replace with your Azure container name
-const containerClient = blobServiceClient.getContainerClient(containerName);
-
-// Check if the container exists, and if not, create it
-const ensureContainerExists = async () => {
-    const containerExists = await containerClient.exists();
-    if (!containerExists) {
-        await containerClient.create();
-        console.log(`Container "${containerName}" created.`);
-    }
-};
-
+// AWS S3 setup
+const s3 = new AWS.S3({
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    region: process.env.AWS_REGION,
+});
 
 // Multer storage configuration to store files in memory temporarily
 const upload = multer({
@@ -36,30 +27,24 @@ const upload = multer({
     { name: 'ValidID', maxCount: 5 }
 ]);
 
-// Helper function to upload a file to Azure Blob Storage
-const uploadToAzure = async (file) => {
+// Helper function to upload a file to AWS S3
+const uploadToS3 = async (file) => {
     const folderPrefix = 'documentrequest-validid/';
-    const blobName = folderPrefix + Date.now() + '-' + file.originalname; // Add folder prefix
-    const blobServiceClient = new BlobServiceClient(`${process.env.BLOB_SAS_URL}`);
-    const containerClient = blobServiceClient.getContainerClient('iservebarangay');
-    const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+    const fileName = folderPrefix + Date.now() + '-' + file.originalname; 
+
+    const params = {
+        Bucket: process.env.S3_BUCKET_NAME, // S3 bucket name
+        Key: fileName, // File name to save as in S3
+        Body: file.buffer,
+        ContentType: file.mimetype,
+    };
 
     try {
-        // Ensure the container exists
-        await ensureContainerExists();
-
-        // Upload the file to Azure Blob Storage
-        await blockBlobClient.uploadData(file.buffer, {
-            blobHTTPHeaders: { blobContentType: file.mimetype }  // Set the content type
-        });
-
-        // Append SAS token for secure access
-        const fileUrlWithSAS = `${blockBlobClient.url}${process.env.BLOB_SAS_TOKEN}`;
-
-        return fileUrlWithSAS;  // Return the URL of the uploaded file with SAS token
+        const data = await s3.upload(params).promise();
+        return data.Location; // Return the URL of the uploaded file
     } catch (error) {
-        console.error('Error uploading to Azure:', error);
-        throw new Error('File upload to Azure failed.');
+        console.error('Error uploading to S3:', error);
+        throw new Error('File upload to S3 failed.');
     }
 };
 
@@ -79,7 +64,6 @@ const generateReferenceNo = async () => {
 
     return referenceNo;
 };
-
 
 // Create a new document request with ValidID and unique ReferenceNo
 const createDocumentRequest = async (req, res) => {
@@ -118,12 +102,12 @@ const createDocumentRequest = async (req, res) => {
         // Generate a unique reference number
         const referenceNo = await generateReferenceNo();
 
-        // Upload each file to Azure and get its URL
+        // Upload each file to S3 and get its URL
         const validIDFiles = req.files && req.files.ValidID ? await Promise.all(
             req.files.ValidID.map(async (file) => ({
                 originalname: file.originalname,
                 mimetype: file.mimetype,
-                url: await uploadToAzure(file)  // Upload file to Azure and get the URL
+                url: await uploadToS3(file)  // Upload file to S3 and get the URL
             }))
         ) : [];
 
@@ -132,7 +116,7 @@ const createDocumentRequest = async (req, res) => {
             return res.status(400).json({ message: "At least one valid ID must be uploaded." });
         }
 
-        // Create and save the document request with the Azure URLs and generated ReferenceNo
+        // Create and save the document request with the S3 URLs and generated ReferenceNo
         const newRequest = new DocumentRequest({
             requestedBy,
             requestedByType,
@@ -153,7 +137,6 @@ const createDocumentRequest = async (req, res) => {
         res.status(500).json({ message: "Failed to create document request", error: error.message });
     }
 };
-
 
 
 // Get all document requests
