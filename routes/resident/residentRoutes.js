@@ -22,16 +22,14 @@ router.post('/login/resident', residentController.signInResident);
 // Resident CRUD operations
 router.post(
     '/new/resident',
-    residentController.upload.fields([
-        { name: 'profilepic', maxCount: 1 },
-        { name: 'validIDs', maxCount: 10 }
-    ]),
+    residentController.upload, 
     residentController.addNewResident
 );
 
+
 router.get('/residents', residentController.getAllResidents);
 router.get('/residents/:id', residentController.getResidentById);
-router.put('/residents/:id', isAuthenticated, isAdmin, residentController.updateResidentById);
+router.put('/residents/:id', residentController.updateResidentById);
 router.delete('/residents/:id', isAuthenticated, residentController.deleteResidentById);
 
 // Resident approval and denial
