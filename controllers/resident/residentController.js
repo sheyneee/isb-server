@@ -415,31 +415,30 @@ const getResidentById = async (req, res) => {
 // Update a resident by ID
 const updateResidentById = async (req, res) => {
     try {
-        // Handle file uploads
-        let profilepicUrl = '';
-        if (req.files && req.files.profilepic) {
-            profilepicUrl = await uploadToS3(req.files.profilepic[0], 'resident/profilepic');
-        }
-
         const { password, ...rest } = req.body;
         if (password) {
             rest.password = password;  
         }
 
-        // Add the profile picture URL if uploaded
-        if (profilepicUrl) {
-            rest.profilepic = profilepicUrl;
+        // Handle file upload
+        let profilepicUrl = '';
+        if (req.files && req.files.profilepic) {
+            profilepicUrl = await uploadToS3(req.files.profilepic[0], 'resident/profilepic');
+            rest.profilepic = profilepicUrl; // Include profile picture URL in the update
         }
 
+        // Update the resident's information in the database
         const resident = await Resident.findByIdAndUpdate(req.params.id, rest, { new: true, runValidators: true });
         if (!resident) {
             return res.status(404).json({ message: 'Resident not found' });
         }
+
         res.json({ resident, message: 'Resident updated successfully' });
     } catch (error) {
         res.status(500).json({ message: 'Something went wrong', error });
     }
 };
+
 
 // Delete a resident by ID
 const deleteResidentById = async (req, res) => {

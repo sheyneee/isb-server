@@ -1,32 +1,43 @@
-const fs = require('fs');
-const path = require('path');
 const multer = require('multer');
 const Announcement = require('../../models/admin/announcementModel');
 const Admin = require('../../models/admin/adminModel');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3'); // Import S3
 
-// Directory for storing uploads
-const UPLOAD_DIR = path.join(__dirname, '../../uploads');
-const ANNOUNCEMENT_DIR = path.join(UPLOAD_DIR, 'announcements');
-
-// Check if the upload directory and subdirectory exist, if not, create them
-if (!fs.existsSync(UPLOAD_DIR)) {
-    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-if (!fs.existsSync(ANNOUNCEMENT_DIR)) {
-    fs.mkdirSync(ANNOUNCEMENT_DIR, { recursive: true });
-}
-
-// Multer storage configuration
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, ANNOUNCEMENT_DIR); // Use the announcements subdirectory
+// AWS S3 setup
+const s3Client = new S3Client({
+    region: process.env.AWS_REGION,
+    credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     },
-    filename: (req, file, cb) => {
-        cb(null, `${Date.now()}-${file.originalname}`); // Rename files to avoid conflicts
-    }
 });
 
-const upload = multer({ storage });
+// Helper function to upload a file to S3
+const uploadToS3 = async (file, folder) => {
+    const fileName = `${folder}/${Date.now()}-${file.originalname}`;
+    const params = {
+        Bucket: process.env.S3_BUCKET_NAME,
+        Key: fileName,
+        Body: file.buffer,
+        ContentType: file.mimetype, // Correct content type
+    };
+
+    try {
+        console.log('Uploading file to S3:', fileName);
+        const command = new PutObjectCommand(params);
+        await s3Client.send(command);
+        // Return the URL of the uploaded file
+        return `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
+    } catch (error) {
+        console.error('Error uploading to S3:', error);
+        throw new Error('File upload to S3 failed.');
+    }
+};
+
+// Multer setup for in-memory storage
+const upload = multer({ storage: multer.memoryStorage() }).fields([
+    { name: 'attachments', maxCount: 1 },
+]);
 
 // Create a new announcement
 const createAnnouncement = async (req, res) => {
@@ -39,16 +50,19 @@ const createAnnouncement = async (req, res) => {
             return res.status(404).json({ message: 'Admin not found' });
         }
 
-        // Handle file attachment
-        const attachment = req.file ? req.file.filename : null; // Store only the filename
+        // Handle file attachment (upload to S3 if present)
+        let attachmentUrl = null;
+        if (req.files && req.files.attachments && req.files.attachments.length > 0) {
+            attachmentUrl = await uploadToS3(req.files.attachments[0], 'announcement'); // Save to the 'announcement' folder in S3
+        }
 
         // Create the announcement
         const newAnnouncement = new Announcement({
             adminID: adminExists._id,
-            announcementCategory, // Directly use announcementCategory
+            announcementCategory,
             title,
             content,
-            attachments: attachment,
+            attachments: attachmentUrl, // Save the S3 URL
             Importance,
         });
 
@@ -58,6 +72,7 @@ const createAnnouncement = async (req, res) => {
         res.status(500).json({ message: 'Something went wrong', error: error.message });
     }
 };
+
 
 // Get all announcements
 const getAllAnnouncements = async (req, res) => {
@@ -83,6 +98,7 @@ const getAnnouncementById = async (req, res) => {
     }
 };
 
+// Update an announcement
 const updateAnnouncementById = async (req, res) => {
     try {
         const { id } = req.params;
@@ -94,8 +110,11 @@ const updateAnnouncementById = async (req, res) => {
             return res.status(404).json({ message: 'Admin not found' });
         }
 
-        // Handle file attachment update
-        const attachment = req.file ? req.file.filename : undefined; // Store only the filename if provided
+        // Handle file attachment update (upload to S3 if present)
+        let attachmentUrl;
+        if (req.files && req.files.attachments && req.files.attachments.length > 0) {
+            attachmentUrl = await uploadToS3(req.files.attachments[0], 'announcement'); // Save to the 'announcement' folder in S3
+        }
 
         const updateData = {
             announcementCategory,
@@ -103,11 +122,11 @@ const updateAnnouncementById = async (req, res) => {
             content,
             Importance,
             updated_at: Date.now(),
-            updated_by: adminExists._id, // Track who made the update
+            updated_by: adminExists._id,
         };
 
-        if (attachment) {
-            updateData.attachments = attachment;
+        if (attachmentUrl) {
+            updateData.attachments = attachmentUrl;
         }
 
         const updatedAnnouncement = await Announcement.findByIdAndUpdate(
