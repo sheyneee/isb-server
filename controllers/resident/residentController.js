@@ -266,23 +266,28 @@ const approveResident = async (req, res) => {
             return res.status(404).json({ message: 'Resident not found' });
         }
 
+        // Update the resident status to 'Approved'
         resident.accountStatus = 'Approved';
         resident.approvedBy = req.user.id; // Ensure req.user.id is properly populated
         await resident.save();
 
-        // If the resident is the head of the family, create a new household
-        if (resident.roleinHousehold === 'Household Head') {
-            const maxHousehold = await Household.findOne().sort('-householdID').exec();
-            const householdID = maxHousehold ? maxHousehold.householdID + 1 : 1;
+        // Update barangay details if resident is approved
+        const barangay = await Barangay.findById(resident.barangay);
+        if (barangay) {
+            // Increment population
+            barangay.population += 1;
 
-            const newHousehold = new Household({
-                householdID,
-                householdHead: resident._id,
-                contactNumber: resident.contactNumber,
-                members: [resident._id]
-            });
+            // Increment the count for each specific attribute if true and resident is approved
+            if (resident.voter) barangay.totalvoters += 1;
+            if (resident.indigent) barangay.totalindigent += 1;
+            if (resident.fourpsmember) barangay.total4psbeneficiary += 1;
+            if (resident.soloparent) barangay.totalsoloparent += 1;
+            if (resident.pwd) barangay.totalpwd += 1;
+            if (resident.seniorCitizen) barangay.totalseniorcitizen += 1;
 
-            await newHousehold.save();
+            await barangay.save();
+        } else {
+            return res.status(404).json({ message: 'Barangay not found' });
         }
 
         res.json({ resident, message: 'Resident approved successfully' });

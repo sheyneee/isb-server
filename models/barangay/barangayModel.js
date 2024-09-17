@@ -14,13 +14,19 @@ const barangaySchema = new mongoose.Schema({
         default: 'IV-A CALABARZON', 
         immutable: true 
     },
-    region: {
+    email:{
+        type: String
+    },
+    contactnumber:{
+        type: String
+    },
+    province: {
         type: String,
         required: [true, 'Province'],
         default: 'Cavite', 
         immutable: true 
     },
-    city: {
+    municipality: {
         type: String,
         required: [true, 'City is required'],
         default: 'Cavite City', 
@@ -31,6 +37,14 @@ const barangaySchema = new mongoose.Schema({
         required: [true, 'Postal Code is required'],
         default: 4100, 
         immutable: true 
+    },
+    location:{
+        type: String,
+        default: '', 
+    },
+    history:{
+        type: String,
+        default: '', 
     },
     barangayCaptain: {
         type: mongoose.Schema.Types.ObjectId,
@@ -51,6 +65,36 @@ const barangaySchema = new mongoose.Schema({
         type: Number,
         default: 0,
         min: [0, 'Population cannot be negative']
+    },
+    totalpwd:{
+        type: Number,
+        default: 0,
+        min: [0, 'PWD cannot be negative']
+    },
+    totalvoters:{
+        type: Number,
+        default: 0,
+        min: [0, 'Voters cannot be negative']
+    },
+    totalindigent:{
+        type: Number,
+        default: 0,
+        min: [0, 'Indigent cannot be negative']
+    },
+    totalseniorcitizen:{
+        type: Number,
+        default: 0,
+        min: [0, 'Senior Citizen cannot be negative']
+    },
+    totalsoloparent:{
+        type: Number,
+        default: 0,
+        min: [0, 'Solo Parent cannot be negative']
+    },
+    total4psbeneficiary:{
+        type: Number,
+        default: 0,
+        min: [0, '4ps Beneficiary cannot be negative']
     },
     isActive: {
         type: Boolean,
