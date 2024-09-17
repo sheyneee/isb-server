@@ -74,10 +74,42 @@ const deleteBarangayById = async (req, res) => {
     }
 };
 
+const getDashboardStats = async (req, res) => {
+    try {
+        console.log('Fetching barangay data for dashboard...');
+        // Assuming there's only one barangay in the system
+        const barangay = await Barangay.findOne();
+        
+        if (!barangay) {
+            console.error('No barangay found in the database.');
+            return res.status(404).json({ message: 'Barangay not found' });
+        }
+
+        // Extract the statistics
+        const stats = {
+            totalPopulation: barangay.population,
+            totalVoters: barangay.totalvoters,
+            totalIndigent: barangay.totalindigent,
+            totalPWDs: barangay.totalpwd,
+            totalSeniorCitizens: barangay.totalseniorcitizen,
+            totalSoloParents: barangay.totalsoloparent,
+            total4Ps: barangay.total4psbeneficiary,
+        };
+
+        console.log('Dashboard stats:', stats);
+        res.json(stats);
+    } catch (error) {
+        console.error('Error in getDashboardStats:', error);
+        res.status(500).json({ message: 'Something went wrong', error: error.message });
+    }
+};
+
+
 module.exports = {
     createBarangay,
     getAllBarangays,
     getBarangayById,
     updateBarangayById,
-    deleteBarangayById
+    deleteBarangayById,
+    getDashboardStats
 };
