@@ -1,13 +1,12 @@
-const fs = require('fs');
-const jwt = require('jsonwebtoken');
-const multer = require('multer');
-const path = require('path');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const Resident = require('../../models/resident/residentModel');
 const Barangay = require('../../models/barangay/barangayModel');
 const Household = require('../../models/resident/householdModel');
 const Admin = require('../../models/admin/adminModel');
+const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
-require('dotenv').config(); // To load environment variables from the .env file
+const multer = require('multer');
+require('dotenv').config(); // Load environment variables
 
 // Create a Nodemailer transporter using Gmail
 const transporter = nodemailer.createTransport({
@@ -63,26 +62,44 @@ const sendVerificationEmail = async (resident, req) => {
 };
 
 
-// Directory for storing uploads
-const UPLOAD_DIR = path.join(__dirname, '../../uploads');
-
-// Check if the upload directory exists, if not, create it
-if (!fs.existsSync(UPLOAD_DIR)) {
-    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
-// Multer storage configuration
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, UPLOAD_DIR); // Use the verified upload directory
+// AWS S3 setup for v3
+const s3Client = new S3Client({
+    region: process.env.AWS_REGION,
+    credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     },
-    filename: (req, file, cb) => {
-        cb(null, `${Date.now()}-${file.originalname}`);
-    }
 });
 
-const upload = multer({ storage });
+// Multer setup for in-memory storage
+const upload = multer({ storage: multer.memoryStorage() }).fields([
+    { name: 'profilepic', maxCount: 1 },
+    { name: 'validIDs', maxCount: 10 }
+]);
 
+// Helper function to upload a file to S3 using AWS SDK v3
+const uploadToS3 = async (file, folder) => {
+    const fileName = `${folder}/${Date.now()}-${file.originalname}`;
+    const params = {
+        Bucket: process.env.S3_BUCKET_NAME,
+        Key: fileName,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+    };
+
+    try {
+        const command = new PutObjectCommand(params);
+        await s3Client.send(command);
+        // Return the URL of the uploaded file
+        return `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
+    } catch (error) {
+        console.error('Error uploading to S3:', error);
+        throw new Error('File upload to S3 failed.');
+    }
+};
+
+
+// Add new resident
 const addNewResident = async (req, res) => {
     try {
         const {
@@ -102,7 +119,6 @@ const addNewResident = async (req, res) => {
             occupation,
             civilStatus,
             roleinHousehold,
-            roleinBarangay,
             householdID,
             voter,
             indigent,
@@ -121,9 +137,19 @@ const addNewResident = async (req, res) => {
             tin_num
         } = req.body;
 
-        // Extract profile picture and valid IDs from req.files
-        const profilepic = req.files && req.files.profilepic ? req.files.profilepic[0].path : '';
-        const validIDs = req.files && req.files.validIDs ? req.files.validIDs.map(file => file.path) : [];
+        // Upload profile picture to S3 (if present)
+        let profilepicUrl = '';
+        if (req.files && req.files.profilepic) {
+            profilepicUrl = await uploadToS3(req.files.profilepic[0], 'resident/profilepic');
+        }
+
+        // Upload valid IDs to S3 (if present)
+        let validIDUrls = [];
+        if (req.files && req.files.validIDs) {
+            validIDUrls = await Promise.all(
+                req.files.validIDs.map(file => uploadToS3(file, 'resident/validid'))
+            );
+        }
 
         // Check for missing required fields
         if (!firstName) return res.status(400).json({ message: 'First name is required' });
@@ -179,8 +205,8 @@ const addNewResident = async (req, res) => {
             civilStatus,
             roleinHousehold,
             roleinBarangay: 'Resident',
-            profilepic, // Save profile picture path
-            validIDs, // Save valid ID paths
+            profilepic: profilepicUrl, // Save profile picture URL
+            validIDs: validIDUrls, // Save valid ID URLs
             voter,
             indigent,
             fourpsmember,
@@ -389,10 +415,22 @@ const getResidentById = async (req, res) => {
 // Update a resident by ID
 const updateResidentById = async (req, res) => {
     try {
+        // Handle file uploads
+        let profilepicUrl = '';
+        if (req.files && req.files.profilepic) {
+            profilepicUrl = await uploadToS3(req.files.profilepic[0], 'resident/profilepic');
+        }
+
         const { password, ...rest } = req.body;
         if (password) {
-            rest.password = password;  // Directly use the plain password
+            rest.password = password;  
         }
+
+        // Add the profile picture URL if uploaded
+        if (profilepicUrl) {
+            rest.profilepic = profilepicUrl;
+        }
+
         const resident = await Resident.findByIdAndUpdate(req.params.id, rest, { new: true, runValidators: true });
         if (!resident) {
             return res.status(404).json({ message: 'Resident not found' });
