@@ -1,47 +1,31 @@
 const express = require('express');
 const cors = require('cors');
 const compression = require('compression');
-const multer = require('multer');
+const bodyParser = require('body-parser'); 
+const http = require('http');
+const socketIo = require('socket.io');
+const messageHandler = require('./handlers/message.handlers');
 require('./config/mongo_config');
 require('dotenv').config();
 
 const app = express();
-const PORT = 8000;
+const server = http.createServer(app);
+
+// CORS setup for Express (still needed for React.js web)
+app.use(cors({
+  origin: ['http://localhost:3000'], // Web frontend URL (for React.js web)
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 
 // Middleware setup
+app.use(bodyParser.json({ limit: '50mb' }));
+app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 app.use(compression());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-app.use(cors());
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true }));
 
-// Serve static files from the 'uploads' directory (for local uploads)
-app.use('/uploads', express.static('uploads'));
-
-// Ensure local folder structure exists for uploads (Optional)
-const fs = require('fs');
-const path = require('path');
-
-// Create folder if it doesn't exist (for local uploads)
-const ensureDirectoryExists = (dir) => {
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-    }
-};
-ensureDirectoryExists(path.join(__dirname, 'uploads/announcements'));
-
-// Multer setup for handling file uploads locally
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/announcements/'); // Directory where files will be saved
-    },
-    filename: (req, file, cb) => {
-        cb(null, `${Date.now()}-${file.originalname}`); // Rename files to avoid conflicts
-    }
-});
-
-const upload = multer({ storage });
-
-// Routes
+// Routes setup
 const adminRoutes = require('./routes/admin/adminRoutes');
 const barangayRoutes = require('./routes/barangay/barangayRoutes');
 const residentRoutes = require('./routes/resident/residentRoutes');
@@ -56,16 +40,46 @@ app.use('/api', householdRoutes);
 app.use('/api', announcementRoutes);
 app.use('/api', documentrequestRoutes);
 
-// Example route for file uploads using multer (for local uploads)
-app.post('/api/upload', upload.single('file'), (req, res) => {
-    try {
-        res.status(200).json({ message: 'File uploaded successfully', file: req.file });
-    } catch (error) {
-        res.status(400).json({ message: 'Error uploading file', error });
-    }
-});
-
-// Starting the server
-app.listen(PORT, () => {
+// Socket.IO CORS setup for Web and React Native clients
+const io = socketIo(server, {
+    cors: {
+      origin: ['http://localhost:3000'], // React.js web frontend
+      methods: ['GET', 'POST'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+      credentials: true,
+    },
+  });
+  
+  // Socket.IO logic remains the same for both React.js and React Native clients
+  let users = {};
+  let admins = {};
+  
+  io.on('connection', (socket) => {
+    console.log(`A user connected with socket id: ${socket.id}`);
+  
+    socket.on('join', (userData) => {
+      // Store the user's data, including userId
+      users[socket.id] = {
+        userId: userData.userId,  // Store user._id sent from the frontend
+        username: `${userData.firstName} ${userData.lastName}`,
+        role: userData.role,
+      };
+      console.log(`User joined: ${users[socket.id].username} with ID: ${users[socket.id].userId}`);
+    });
+  
+    // Handle messages and other events
+    messageHandler.createMessage(socket, users, io, admins);
+  
+    socket.on('disconnect', () => {
+      console.log(`${users[socket.id]?.username || "User"} disconnected`);
+      delete users[socket.id];
+      delete admins[socket.id];
+    });
+  });
+  
+  
+  // Start the server
+  const PORT = 8000;
+  server.listen(PORT, () => {
     console.log(`>> Server is running on port ${PORT} <<`);
-});
+  });

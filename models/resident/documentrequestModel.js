@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Barangay = require('../barangay/barangayModel');
-const Resident= require('../../models/resident/residentModel')
+const Resident= require('../../models/resident/residentModel');
+const Admin = require('../admin/adminModel')
 
 const documentRequestSchema = new mongoose.Schema({
     requestedBy: { 

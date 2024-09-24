@@ -1,15 +1,17 @@
-const AWS = require('aws-sdk');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const DocumentRequest = require('../../models/resident/documentrequestModel');
 const Resident = require('../../models/resident/residentModel');
 const Admin = require('../../models/admin/adminModel');
 const mongoose = require('mongoose');
 const multer = require('multer');
 
-// AWS S3 setup
-const s3 = new AWS.S3({
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+// AWS S3 setup using AWS SDK v3
+const s3Client = new S3Client({
     region: process.env.AWS_REGION,
+    credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    },
 });
 
 // Multer storage configuration to store files in memory temporarily
@@ -22,15 +24,13 @@ const upload = multer({
         } else {
             cb(new Error('Invalid file type. Only PDF, PNG, JPG, and JPEG are allowed.'));
         }
-    }
-}).fields([
-    { name: 'ValidID', maxCount: 5 }
-]);
+    },
+}).fields([{ name: 'ValidID', maxCount: 5 }]);
 
-// Helper function to upload a file to AWS S3
+// Helper function to upload a file to AWS S3 using SDK v3
 const uploadToS3 = async (file) => {
     const folderPrefix = 'documentrequest-validid/';
-    const fileName = folderPrefix + Date.now() + '-' + file.originalname; 
+    const fileName = folderPrefix + Date.now() + '-' + file.originalname;
 
     const params = {
         Bucket: process.env.S3_BUCKET_NAME, // S3 bucket name
@@ -40,8 +40,10 @@ const uploadToS3 = async (file) => {
     };
 
     try {
-        const data = await s3.upload(params).promise();
-        return data.Location; // Return the URL of the uploaded file
+        // Use PutObjectCommand to upload the file to S3
+        const command = new PutObjectCommand(params);
+        const data = await s3Client.send(command);
+        return `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`; // Construct the file URL
     } catch (error) {
         console.error('Error uploading to S3:', error);
         throw new Error('File upload to S3 failed.');
@@ -102,8 +104,8 @@ const createDocumentRequest = async (req, res) => {
         // Generate a unique reference number
         const referenceNo = await generateReferenceNo();
 
-        // Upload each file to S3 and get its URL
-        const validIDFiles = req.files && req.files.ValidID ? await Promise.all(
+         // Upload each file to S3 and get its URL
+         const validIDFiles = req.files && req.files.ValidID ? await Promise.all(
             req.files.ValidID.map(async (file) => ({
                 originalname: file.originalname,
                 mimetype: file.mimetype,
@@ -174,7 +176,7 @@ const getDocumentRequestById = async (req, res) => {
     }
 };
 
-// Update a document request by ID with Base64 encoded ValidID
+// Update a document request by ID with file uploads to AWS S3
 const updateDocumentRequestById = async (req, res) => {
     try {
         const requestId = req.params.id;
@@ -192,14 +194,14 @@ const updateDocumentRequestById = async (req, res) => {
             return res.status(400).json({ message: "Invalid document request ID" });
         }
 
-        // If new ValidID files are uploaded, upload them to Azure Blob Storage and get their URLs
+        // If new ValidID files are uploaded, upload them to S3 and get their URLs
         let validIDFiles = [];
         if (req.files && req.files.ValidID) {
             validIDFiles = await Promise.all(
                 req.files.ValidID.map(async (file) => ({
                     originalname: file.originalname,
                     mimetype: file.mimetype,
-                    url: await uploadToAzure(file)  // Upload file to Azure and get the URL
+                    url: await uploadToS3(file)  // Upload file to AWS S3 and get the URL
                 }))
             );
         }
@@ -231,8 +233,6 @@ const updateDocumentRequestById = async (req, res) => {
         res.status(500).json({ message: "Failed to update document request", error: error.message });
     }
 };
-
-
 
 // Delete a document request by ID
 const deleteDocumentRequestById = async (req, res) => {

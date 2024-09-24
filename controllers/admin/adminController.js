@@ -4,11 +4,11 @@ const Admin = require('../../models/admin/adminModel');
 const Barangay = require('../../models/barangay/barangayModel');
 const Household = require('../../models/resident/householdModel');
 const Resident = require('../../models/resident/residentModel'); 
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const nodemailer = require('nodemailer');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 require('dotenv').config(); 
+const path = require('path');
 
 
 // Create a Nodemailer transporter using Gmail
@@ -42,78 +42,54 @@ transporter.sendMail(mailOptions, (error, info) => {
     }
 });
 
-
-
-// Multer setup for profile picture uploads
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        const dir = 'uploads/profile_pics';
-
-        // Check if directory exists, if not, create it
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
-
-        cb(null, dir); // Set the destination to the uploads/profile_pics folder
+// AWS S3 setup
+const s3Client = new S3Client({
+    region: process.env.AWS_REGION,
+    credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
-    }
 });
 
-const fileFilter = (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-    if (extname && mimetype) {
-        return cb(null, true);
-    } else {
-        cb(new Error('Only .png, .jpg, and .jpeg formats are allowed!'), false);
+// Helper function to upload files to S3
+const uploadToS3 = async (file, folder) => {
+    const fileName = `${folder}/${Date.now()}-${file.originalname}`;
+    const params = {
+        Bucket: process.env.S3_BUCKET_NAME,
+        Key: fileName,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+    };
+    try {
+        const command = new PutObjectCommand(params);
+        await s3Client.send(command);
+        return `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
+    } catch (error) {
+        console.error('Error uploading to S3:', error);
+        throw new Error('File upload to S3 failed.');
     }
 };
 
-const upload = multer({
-    storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-    fileFilter: fileFilter
-});
+// Combined upload middleware for both profilepic and validIDs
+const uploadFiles = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 50 * 1024 * 1024 }, // Set file size limit (25MB)
+    fileFilter: (req, file, cb) => {
+        const allowedFileTypes = {
+            profilepic: ['image/png', 'image/jpeg', 'image/jpg'],
+            validIDs: ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf']
+        };
 
-// Multer setup for valid ID uploads
-const validIDStorage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        const dir = 'uploads/valid_ids';
-
-        // Check if directory exists, if not, create it
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
+        if (allowedFileTypes[file.fieldname] && allowedFileTypes[file.fieldname].includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error(`Invalid file type for ${file.fieldname}.`));
         }
-
-        cb(null, dir);
     },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
-    }
-});
-
-const validIDFileFilter = (req, file, cb) => {
-    const allowedTypes = /pdf|jpeg|jpg|png/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-
-    if (extname && mimetype) {
-        return cb(null, true);
-    } else {
-        cb(new Error('Only .pdf, .jpeg, .jpg, and .png formats are allowed!'), false);
-    }
-};
-
-const uploadValidIDs = multer({
-    storage: validIDStorage,
-    limits: { fileSize: 20 * 1024 * 1024 }, // 20MB limit
-    fileFilter: validIDFileFilter
-});
+}).fields([
+    { name: 'profilepic', maxCount: 1 },
+    { name: 'validIDs', maxCount: 10 }
+]);
 
 
 const sendVerificationEmail = async (user, req) => {
@@ -141,133 +117,134 @@ const sendVerificationEmail = async (user, req) => {
 
 const addNewAdmin = async (req, res) => {
     try {
-        upload.single('profilepic')(req, res, async function (err) {
-            if (err instanceof multer.MulterError) {
-                return res.status(400).json({ message: err.message });
-            } else if (err) {
+        // Use the combined upload middleware
+        uploadFiles(req, res, async (err) => {
+            if (err) {
                 return res.status(400).json({ message: err.message });
             }
 
-            uploadValidIDs.array('validIDs', 10)(req, res, async function (err) {
-                if (err instanceof multer.MulterError) {
-                    return res.status(400).json({ message: err.message });
-                } else if (err) {
-                    return res.status(400).json({ message: err.message });
-                }
+            // Check for files and process them
+            let profilepicUrl = '';
+            if (req.files && req.files.profilepic && req.files.profilepic.length > 0) {
+                profilepicUrl = await uploadToS3(req.files.profilepic[0], 'admin/profilepics');
+            }
 
-                const {
-                    email,
-                    password,
-                    firstName,
-                    middleName,
-                    lastName,
-                    suffix,
-                    birthday,
-                    birthplace,
-                    nationality,
-                    sex,
-                    permanentAddress, 
-                    presentAddress, 
-                    civilStatus,
-                    occupation,
-                    roleinBarangay,
-                    roleinHousehold,  // Ensure this field is included
-                    householdID, // Added for the case of household member
-                    religion,
-                    indigent,
-                    fourpsmember,
-                    soloparent,
-                    pwd,
-                    soloparentid_num,
-                    pwdid_num,
-                    seniorCitizen,
-                    seniorcitizenid_num,
-                    philsys_num,
-                    voters_id,
-                    sss_num,
-                    pagibig_num,
-                    philhealth_num,
-                    tin_num,
-                    contactNumber
-                } = req.body;
+            let validIDUrls = [];
+            if (req.files && req.files.validIDs && req.files.validIDs.length > 0) {
+                validIDUrls = await Promise.all(
+                    req.files.validIDs.map(file => uploadToS3(file, 'admin/validids'))
+                );
+            }
+            // Extract other fields from req.body
+            const {
+                email,
+                password,
+                firstName,
+                middleName,
+                lastName,
+                suffix,
+                birthday,
+                birthplace,
+                nationality,
+                sex,
+                permanentAddress,
+                presentAddress,
+                civilStatus,
+                occupation,
+                roleinBarangay,
+                roleinHousehold,
+                householdID,
+                religion,
+                indigent,
+                fourpsmember,
+                soloparent,
+                pwd,
+                soloparentid_num,
+                pwdid_num,
+                seniorCitizen,
+                seniorcitizenid_num,
+                philsys_num,
+                voters_id,
+                sss_num,
+                pagibig_num,
+                philhealth_num,
+                tin_num,
+                contactNumber
+            } = req.body;
 
                 // Check required fields
                 if (!email || !password || !firstName || !lastName || !birthday || !birthplace || !nationality || !sex || !permanentAddress || !civilStatus || !occupation || !roleinBarangay || !contactNumber) {
                     return res.status(400).json({ message: 'Missing required fields' });
                 }
 
-                // Check if permanentAddress has required subfields
-                if (!permanentAddress.street || !permanentAddress.houseNo) {
-                    return res.status(400).json({ message: 'Permanent address is missing required fields (street and houseNo)' });
-                }
+                    // Check if permanentAddress has required subfields
+                    if (!permanentAddress.street || !permanentAddress.houseNo) {
+                        return res.status(400).json({ message: 'Permanent address is missing required fields (street and houseNo)' });
+                    }
 
-                // Check if the admin already exists
-                const existingAdmin = await Admin.findOne({ email });
-                if (existingAdmin) {
-                    return res.status(400).json({ message: 'Admin with this email already exists' });
-                }
+                    // Check if the admin already exists
+                    const existingAdmin = await Admin.findOne({ email });
+                    if (existingAdmin) {
+                        return res.status(400).json({ message: 'Admin with this email already exists' });
+                    }
 
-                // Fetch a barangay to associate with the new admin
-                const barangay = await Barangay.findOne();
-                if (!barangay) {
-                    return res.status(404).json({ message: 'No barangay found' });
-                }
+                    // Fetch a barangay to associate with the new admin
+                    const barangay = await Barangay.findOne();
+                    if (!barangay) {
+                        return res.status(404).json({ message: 'No barangay found' });
+                    }
 
-                // Ensure first admin is Barangay Captain
-                const anyAdminExists = await Admin.countDocuments();
-                if (!anyAdminExists && roleinBarangay !== 'Barangay Captain') {
-                    return res.status(403).json({ message: 'The first admin must be the Barangay Captain' });
-                }
+                    // Ensure there is only one Barangay Captain
+                    if (roleinBarangay === 'Barangay Captain') {
+                        const existingCaptain = await Admin.findOne({ roleinBarangay: 'Barangay Captain', barangay: barangay._id });
+                        if (existingCaptain) {
+                            return res.status(400).json({ message: 'A Barangay Captain already exists for this barangay.' });
+                        }
+                    }
 
-                // Restrict certain roles
-                if (['Secretary', 'Kagawad'].includes(roleinBarangay) && req.user.roleinBarangay !== 'Barangay Captain') {
-                    return res.status(403).json({ message: 'Only a Barangay Captain can assign Secretary or Kagawad roles' });
-                }
+                    // Restrict certain roles
+                    if (['Secretary', 'Kagawad'].includes(roleinBarangay) && req.user.roleinBarangay !== 'Barangay Captain') {
+                        return res.status(403).json({ message: 'Only a Barangay Captain can assign Secretary or Kagawad roles' });
+                    }
 
-                // Save profile picture if uploaded
-                const profilePicPath = req.file ? req.file.path : null;
-
-                // Save valid ID file paths
-                const validIDFilePaths = req.files ? req.files.map(file => file.path) : [];
-
-                // Create the new admin
-                const newAdmin = new Admin({
-                    email,
-                    password,
-                    firstName,
-                    middleName,
-                    lastName,
-                    suffix,
-                    barangay: barangay._id,
-                    birthday,
-                    birthplace,
-                    nationality,
-                    sex,
-                    permanentAddress, 
-                    presentAddress,
-                    civilStatus,
-                    occupation,
-                    roleinBarangay,
-                    roleinHousehold,
-                    religion,
-                    indigent,
-                    fourpsmember,
-                    soloparent,
-                    pwd,
-                    soloparentid_num,
-                    pwdid_num,
-                    seniorCitizen,
-                    seniorcitizenid_num,
-                    philsys_num,
-                    voters_id,
-                    sss_num,
-                    pagibig_num,
-                    philhealth_num,
-                    tin_num,
-                    contactNumber,
-                    profilepic: profilePicPath, 
-                    validIDs: validIDFilePaths 
-                });
+                    // Create the new admin
+                    const newAdmin = new Admin({
+                        email,
+                        password,
+                        firstName,
+                        middleName,
+                        lastName,
+                        suffix,
+                        barangay: barangay._id,
+                        birthday,
+                        birthplace,
+                        nationality,
+                        sex,
+                        permanentAddress,
+                        presentAddress,
+                        civilStatus,
+                        occupation,
+                        roleinBarangay,
+                        roleinHousehold,
+                        religion,
+                        indigent,
+                        fourpsmember,
+                        soloparent,
+                        pwd,
+                        soloparentid_num,
+                        pwdid_num,
+                        seniorCitizen,
+                        seniorcitizenid_num,
+                        philsys_num,
+                        voters_id,
+                        sss_num,
+                        pagibig_num,
+                        philhealth_num,
+                        tin_num,
+                        contactNumber,
+                        profilepic: profilepicUrl,
+                        validIDs: validIDUrls
+                    });
 
                 // Assign the admin to the correct role in the barangay
                 if (roleinBarangay === 'Barangay Captain') {
@@ -275,100 +252,101 @@ const addNewAdmin = async (req, res) => {
                 } else if (roleinBarangay === 'Secretary') {
                     barangay.barangaySecretary = newAdmin._id;
                 } else if (roleinBarangay === 'Kagawad') {
-                    barangay.barangayKagawad.push(newAdmin._id); // Assuming multiple Kagawads
+                    barangay.barangayKagawad.push(newAdmin._id);
                 }
 
                 // Save the updated barangay
-                await barangay.save();
+            await barangay.save();
 
-                // Create the corresponding resident account
-                const newResident = new Resident({
-                    email,
-                    password,  
-                    firstName,
-                    middleName,
-                    lastName,
-                    suffix,
-                    barangay: barangay._id,
-                    birthday,
-                    birthplace,
-                    nationality,
-                    sex,
-                    permanentAddress, 
-                    presentAddress,
-                    civilStatus,
-                    occupation,
-                    roleinBarangay: 'Resident',  // Fixed role for resident
-                    roleinHousehold,
-                    religion,
-                    indigent,
-                    fourpsmember,
-                    soloparent,
-                    pwd,
-                    soloparentid_num,
-                    pwdid_num,
-                    seniorCitizen,
-                    seniorcitizenid_num,
-                    philsys_num,
-                    voters_id,
-                    sss_num,
-                    pagibig_num,
-                    philhealth_num,
-                    tin_num,
-                    contactNumber,
-                    profilepic: profilePicPath, 
-                    validIDs: validIDFilePaths 
+            // Create the corresponding resident account
+            const newResident = new Resident({
+                email,
+                password,
+                firstName,
+                middleName,
+                lastName,
+                suffix,
+                barangay: barangay._id,
+                birthday,
+                birthplace,
+                nationality,
+                sex,
+                permanentAddress,
+                presentAddress,
+                civilStatus,
+                occupation,
+                roleinBarangay: 'Resident', // Fixed role for resident
+                roleinHousehold,
+                religion,
+                indigent,
+                fourpsmember,
+                soloparent,
+                pwd,
+                soloparentid_num,
+                pwdid_num,
+                seniorCitizen,
+                seniorcitizenid_num,
+                philsys_num,
+                voters_id,
+                sss_num,
+                pagibig_num,
+                philhealth_num,
+                tin_num,
+                contactNumber,
+                profilepic: profilepicUrl,
+                validIDs: validIDUrls
+            });
+
+            // Save both the admin and resident accounts
+            await Promise.all([newAdmin.save(), newResident.save()]);
+
+            // Send verification email for the new admin
+            await sendVerificationEmail(newAdmin, req);
+
+            // Case 1: Create a household if the resident is the head of the household
+            if (roleinHousehold === 'Household Head') {
+                const maxHousehold = await Household.findOne().sort('-householdID').exec();
+                const householdID = maxHousehold ? maxHousehold.householdID + 1 : 1;
+
+                const newHousehold = new Household({
+                    householdID,
+                    householdHead: newResident._id,
+                    contactNumber: newResident.contactNumber,
+                    members: [newResident._id],
                 });
 
-                // Save both the admin and resident accounts
-                await Promise.all([newAdmin.save(), newResident.save()]);
+                await newHousehold.save();
 
-                // Send verification email for the new admin
-                await sendVerificationEmail(newAdmin, req);
+                // Update the resident's householdID
+                newResident.householdID = newHousehold._id;
+                await newResident.save();
+            }
 
-                // Case 1: Create a household if the resident is the head of the household
-                if (roleinHousehold === 'Household Head') {
-                    const maxHousehold = await Household.findOne().sort('-householdID').exec();
-                    const householdID = maxHousehold ? maxHousehold.householdID + 1 : 1;
+            // Case 2: Add to an existing household if the resident is a family member
+            if (roleinHousehold === 'Household Member' && householdID) {
+                const household = await Household.findOne({ householdID });
 
-                    const newHousehold = new Household({
-                        householdID,
-                        householdHead: newResident._id,
-                        contactNumber: newResident.contactNumber,
-                        members: [newResident._id],
-                    });
-
-                    await newHousehold.save();
-
-                    // Update the resident's householdID
-                    newResident.householdID = newHousehold._id;
-                    await newResident.save();
+                if (!household) {
+                    return res.status(404).json({ message: 'Household not found' });
                 }
 
-                // Case 2: Add to an existing household if the resident is a family member
-                if (roleinHousehold === 'Household Member' && householdID) {
-                    const household = await Household.findOne({ householdID });
+                // Update the household with the new resident
+                household.members.push(newResident._id);
+                await household.save();
 
-                    if (!household) {
-                        return res.status(404).json({ message: 'Household not found' });
-                    }
+                // Update the resident's householdID field
+                newResident.householdID = household._id;
+                await newResident.save();
+            }
 
-                    // Update the household with the new resident
-                    household.members.push(newResident._id);
-                    await household.save();
-
-                    // Update the resident's householdID field
-                    newResident.householdID = household._id;
-                    await newResident.save();
-                }
-
-                res.status(201).json({ newAdmin, newResident, message: "Successfully added a new admin, resident account, and household (if applicable)." });
-            });
+            res.status(201).json({ message: "Successfully added a new admin." });
         });
     } catch (err) {
         res.status(500).json({ message: 'Something went wrong', error: err.message });
     }
 };
+
+
 
 const verifyEmail = async (req, res) => {
     try {
@@ -499,20 +477,126 @@ const deleteAdminById = async (req, res) => {
     }
 };
 
-// Update admin
 const updateAdmin = async (req, res) => {
     try {
+        // Find the admin to update
         const adminToUpdate = await Admin.findById(req.params.id);
         if (!adminToUpdate) {
             return res.status(404).json({ message: 'Admin not found' });
         }
 
-        const updatedAdmin = await Admin.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
-        res.json({ updatedAdmin, message: "Admin updated successfully" });
+        // Get the profile picture URL if a new picture is uploaded
+        let profilepicUrl = adminToUpdate.profilepic; // Preserve existing URL
+        if (req.files && req.files.profilepic && req.files.profilepic.length > 0) {
+            profilepicUrl = await uploadToS3(req.files.profilepic[0], 'admin/profilepics');
+        }
+
+        // Get the valid IDs URLs if new files are uploaded, or preserve the existing ones
+        let validIDUrls = adminToUpdate.validIDs; // Preserve existing valid ID URLs
+        if (req.files && req.files.validIDs && req.files.validIDs.length > 0) {
+            validIDUrls = await Promise.all(
+                req.files.validIDs.map(file => uploadToS3(file, 'admin/validids'))
+            );
+        }
+
+        // Extract other fields from req.body
+        const {
+            email,
+            password,
+            firstName,
+            middleName,
+            lastName,
+            suffix,
+            birthday,
+            birthplace,
+            nationality,
+            sex,
+            permanentAddress,
+            presentAddress,
+            civilStatus,
+            occupation,
+            roleinBarangay,
+            roleinHousehold,
+            religion,
+            indigent,
+            fourpsmember,
+            soloparent,
+            pwd,
+            soloparentid_num,
+            pwdid_num,
+            seniorCitizen,
+            seniorcitizenid_num,
+            philsys_num,
+            voters_id,
+            sss_num,
+            pagibig_num,
+            philhealth_num,
+            tin_num,
+            contactNumber
+        } = req.body;
+
+        // Update only fields that are provided in the request
+        const updateData = {
+            email,
+            password,
+            firstName,
+            middleName,
+            lastName,
+            suffix,
+            birthday,
+            birthplace,
+            nationality,
+            sex,
+            permanentAddress,
+            presentAddress,
+            civilStatus,
+            occupation,
+            roleinBarangay,
+            roleinHousehold,
+            religion,
+            indigent,
+            fourpsmember,
+            soloparent,
+            pwd,
+            soloparentid_num,
+            pwdid_num,
+            seniorCitizen,
+            seniorcitizenid_num,
+            philsys_num,
+            voters_id,
+            sss_num,
+            pagibig_num,
+            philhealth_num,
+            tin_num,
+            contactNumber,
+            profilepic: profilepicUrl, // Use the new URL if uploaded, or the existing one
+            validIDs: validIDUrls, // Use the new URLs if uploaded, or the existing ones
+            updated_at: Date.now(),
+        };
+
+        // Remove any undefined fields from updateData
+        Object.keys(updateData).forEach(key => {
+            if (updateData[key] === undefined) {
+                delete updateData[key];
+            }
+        });
+
+        // Update the admin's information
+        const updatedAdmin = await Admin.findByIdAndUpdate(req.params.id, updateData, {
+            new: true,
+            runValidators: true,
+        });
+        
+        console.log('Received files:', req.files);
+        console.log('Received body:', req.body);
+
+        res.status(200).json({ updatedAdmin, message: "Admin updated successfully." });
     } catch (err) {
-        res.status(500).json({ message: 'Something went wrong', error: err });
+        console.error('Error in updateAdmin:', err);
+        res.status(500).json({ message: 'Something went wrong', error: err.message });
     }
 };
+
 
 // Find admin by ID
 const getAdminById = async (req, res) => {
@@ -538,6 +622,5 @@ module.exports = {
     resendVerificationEmail,
     verifyEmail,
     sendVerificationEmail,
-    upload, 
-    uploadValidIDs
+    uploadFiles,
 };

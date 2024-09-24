@@ -1,16 +1,35 @@
 const mongoose = require('mongoose');
+const Resident= require('../../models/resident/residentModel');
+const Admin = require('../admin/adminModel')
+const Barangay = require('../barangay/barangayModel');
 
 const incidentReportSchema = new mongoose.Schema({
-    residentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Resident', required: true },
-    typeOfComplaint: { 
-        type: String, 
-        enum: ['Utility Interruptions', 'Noise Complaint', 'Public Disturbance', 'Waste Management', 'Others'],
+    complainantID: { 
+        type: mongoose.Schema.Types.ObjectId, 
+        required: true,
+        refPath: 'complainantByType'  
+    },
+    complainantByType: {
+        type: String,
+        required: true,
+        enum: ['Resident', 'Admin'] 
+    },
+    complainantname:{
+        type: String,
+    },
+    typeofcomplaint: { 
+        type: String,
         required: true 
     },
-    title: { type: String, required: true },
-    incidentDate: { type: Date, required: true },
-    description: { type: String, required: true },
-    attachments: [{ type: String, required: true }], 
+    incidentdescription:{
+        type: String,
+        required: true
+    },
+    status:{
+        type: String,
+        enum: ['Pending', 'Active','Schedules','Settled'],
+        default: 'Pending'
+    },
     created_at: {
         type: Date,
         default: Date.now

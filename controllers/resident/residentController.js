@@ -71,11 +71,28 @@ const s3Client = new S3Client({
     },
 });
 
-// Multer setup for in-memory storage
-const upload = multer({ storage: multer.memoryStorage() }).fields([
+// Multer setup for in-memory storage with file type validation
+const upload = multer({
+    storage: multer.memoryStorage(),
+    fileFilter: (req, file, cb) => {
+        // Define allowed file types for each field
+        const allowedFileTypes = {
+            profilepic: ['image/png', 'image/jpeg', 'image/jpg'],
+            validIDs: ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg']
+        };
+
+        // Check if the file field name is in allowedFileTypes and if the mimetype is allowed
+        if (allowedFileTypes[file.fieldname] && allowedFileTypes[file.fieldname].includes(file.mimetype)) {
+            cb(null, true); // Accept the file
+        } else {
+            cb(new Error(`Invalid file type for ${file.fieldname}. Allowed types: ${allowedFileTypes[file.fieldname].join(', ')}`));
+        }
+    }
+}).fields([
     { name: 'profilepic', maxCount: 1 },
     { name: 'validIDs', maxCount: 10 }
 ]);
+
 
 // Helper function to upload a file to S3 using AWS SDK v3
 const uploadToS3 = async (file, folder) => {
