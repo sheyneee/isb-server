@@ -25,7 +25,7 @@ const upload = multer({
             cb(new Error('Invalid file type. Only PDF, PNG, JPG, and JPEG are allowed.'));
         }
     },
-}).fields([{ name: 'ValidID', maxCount: 5 }]);
+}).fields([{ name: 'ValidID', maxCount: 5 }]); // Multer expects a field named 'ValidID'
 
 // Helper function to upload a file to AWS S3 using SDK v3
 const uploadToS3 = async (file) => {
