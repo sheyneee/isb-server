@@ -25,6 +25,17 @@ const incidentReportSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    dateAndTimeofIncident:{
+        type: Date
+    },
+    Attachment: {
+        type: [{
+            originalname: { type: String, required: true },
+            mimetype: { type: String, required: true },
+            url: { type: String, required: true } 
+        }],
+        default: []
+    },
     status:{
         type: String,
         enum: ['Pending', 'Active','Schedules','Settled'],

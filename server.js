@@ -32,6 +32,7 @@ const residentRoutes = require('./routes/resident/residentRoutes');
 const householdRoutes = require('./routes/resident/householdRoutes');
 const announcementRoutes = require('./routes/admin/announcementRoutes');
 const documentrequestRoutes = require('./routes/resident/documentrequestRoutes');
+const incidentfilingRoutes = require('./routes/resident/incidentfilingRoutes')
 
 app.use('/api', adminRoutes);
 app.use('/api', barangayRoutes);
@@ -39,6 +40,7 @@ app.use('/api', residentRoutes);
 app.use('/api', householdRoutes);
 app.use('/api', announcementRoutes);
 app.use('/api', documentrequestRoutes);
+app.use('/api', incidentfilingRoutes);
 
 // Socket.IO CORS setup for Web and React Native clients
 const io = socketIo(server, {
