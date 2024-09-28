@@ -196,11 +196,34 @@ const deleteIncidentReport = async (req, res) => {
     }
 };
 
+// Controller to get incident reports by userId
+const getIncidentReportHistoryByUser = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(userId)) {
+            return res.status(400).json({ message: "Invalid user ID" });
+        }
+
+        // Fetch reports where the complainantID matches the provided userId
+        const reports = await IncidentReport.find({ complainantID: userId }).populate('complainantID');
+
+        if (!reports || reports.length === 0) {
+            return res.status(404).json({ message: "No incident reports found for this user" });
+        }
+
+        res.status(200).json(reports);
+    } catch (error) {
+        res.status(500).json({ message: "Failed to fetch incident report history", error: error.message });
+    }
+};
+
 module.exports = {
     createIncidentReport,
     getAllIncidentReports,
     getIncidentReportById,
     updateIncidentReport,
     deleteIncidentReport,
+    getIncidentReportHistoryByUser,
     upload
 };

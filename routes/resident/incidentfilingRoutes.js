@@ -16,6 +16,9 @@ router.put('/incident-reports/:id',
 // Route for fetching all incident reports
 router.get('/all/incident-reports', incidentReportController.getAllIncidentReports);
 
+// Route for fetching incident report by user
+router.get('/incident-reports/history/:userId', incidentReportController.getIncidentReportHistoryByUser);
+
 // Route for fetching a specific incident report by ID
 router.get('/incident-reports/:id', incidentReportController.getIncidentReportById);
 
