@@ -1,6 +1,4 @@
 const mongoose = require('mongoose');
-const Barangay = require('../barangay/barangayModel');
-const Household = require('../resident/householdModel');
 const moment = require('moment');
 
 const residentSchema = new mongoose.Schema({
@@ -187,21 +185,35 @@ const residentSchema = new mongoose.Schema({
 });
 
 // Pre-save middleware to handle the assignment of barangay, residentID, and dynamic age calculation
-residentSchema.pre('save', async function(next) {
+residentSchema.pre('save', async function (next) {
     try {
         if (this.isNew) {
+            // Lazy load Barangay and Household models to avoid circular dependency
+            const Barangay = require('../barangay/barangayModel');
+            const Household = require('./householdModel'); // Lazy-loaded here
+
+            // Assign Barangay (similar to previous)
             const barangay = await Barangay.findOne();
             if (!barangay) {
                 return next(new Error('No Barangay found to assign'));
             }
             this.barangay = barangay._id;
+
+            // Assign Household if it's present
+            if (this.householdID) {
+                const household = await Household.findById(this.householdID);
+                if (!household) {
+                    return next(new Error('No Household found with the given ID'));
+                }
+            }
+
+            // ResidentID generation logic
             const currentYear = new Date().getFullYear();
+            const latestResident = await this.constructor.findOne({
+                residentID: new RegExp(`^R-${currentYear}-\\d{4}$`)
+            }).sort({ residentID: -1 }).exec();
 
-            const latestResident = await this.constructor.findOne({ residentID: new RegExp(`^R-${currentYear}-\\d{4}$`) })
-                .sort({ residentID: -1 })
-                .exec();
             let newIncrement;
-
             if (latestResident) {
                 const lastIncrement = parseInt(latestResident.residentID.split('-')[2], 10);
                 newIncrement = lastIncrement + 1;
@@ -213,7 +225,7 @@ residentSchema.pre('save', async function(next) {
             this.residentID = `R-${currentYear}-${incrementString}`;
         }
 
-        // Calculate age dynamically
+        // Age calculation
         const now = moment();
         const birthDate = moment(this.birthday);
         this.age = now.diff(birthDate, 'years');
@@ -225,9 +237,8 @@ residentSchema.pre('save', async function(next) {
     }
 });
 
-
 // Pre-update middleware to handle dynamic age calculation on update
-residentSchema.pre('findOneAndUpdate', async function(next) {
+residentSchema.pre('findOneAndUpdate', async function (next) {
     const update = this.getUpdate();
     if (update.$set && update.$set.birthday) {
         const now = moment();

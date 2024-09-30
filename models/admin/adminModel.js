@@ -1,6 +1,4 @@
 const mongoose = require('mongoose');
-const Barangay = require('../barangay/barangayModel');
-const Household = require('../resident/householdModel');
 const moment = require('moment');
 
 const adminSchema = new mongoose.Schema({
@@ -173,9 +171,13 @@ const adminSchema = new mongoose.Schema({
     }
 });
 
-adminSchema.pre('save', async function(next) {
+// Pre-save middleware to handle barangay and dynamic age calculation
+adminSchema.pre('save', async function (next) {
     try {
         if (this.isNew) {
+            // Lazy load Barangay model to avoid circular dependency
+            const Barangay = require('../barangay/barangayModel');
+
             const barangay = await Barangay.findOne();
             if (!barangay) {
                 return next(new Error('No Barangay found to assign'));
@@ -210,8 +212,8 @@ adminSchema.pre('save', async function(next) {
     }
 });
 
-
-adminSchema.pre('findOneAndUpdate', async function(next) {
+// Pre-update middleware for dynamic age calculation
+adminSchema.pre('findOneAndUpdate', async function (next) {
     const update = this.getUpdate();
     if (update.$set && update.$set.birthday) {
         const now = moment();

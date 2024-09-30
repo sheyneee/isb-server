@@ -14,6 +14,11 @@ const incidentReportSchema = new mongoose.Schema({
         required: true,
         enum: ['Resident', 'Admin'] 
     },
+    ReferenceNo:{
+        type: String, 
+        unique: true,
+        required: true
+    },
     complainantname:{
         type: String,
     },
@@ -38,7 +43,7 @@ const incidentReportSchema = new mongoose.Schema({
     },
     status:{
         type: String,
-        enum: ['Pending', 'Active','Schedules','Settled'],
+        enum: ['Pending', 'Active','Scheduled','Settled'],
         default: 'Pending'
     },
     created_at: {
