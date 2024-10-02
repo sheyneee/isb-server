@@ -113,6 +113,9 @@ const adminSchema = new mongoose.Schema({
         required: [true, 'Role is required'],
         enum: ['Household Head', 'Household Member']
     },
+    reltohouseholdhead:{
+        type: String
+    },
     voter: {
         type: Boolean,
         default: false

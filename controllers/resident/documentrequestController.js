@@ -53,17 +53,15 @@ const uploadToS3 = async (file) => {
 const generateReferenceNo = async () => {
     let referenceNo;
     let exists = true;
-    
-    // Ensure the generated reference number is unique
+    const year = new Date().getFullYear();
     do {
-        // Generate a random 10-digit number
-        referenceNo = Math.floor(1000000000 + Math.random() * 9000000000).toString(); 
+        const randomDigits = Math.floor(100000 + Math.random() * 900000).toString();
 
-        // Check if the reference number already exists in the database
+        referenceNo = `DR-${year}-${randomDigits}`;
+
         const existingRequest = await DocumentRequest.findOne({ ReferenceNo: referenceNo });
         exists = !!existingRequest;
-    } while (exists);  // Repeat until the reference number is unique
-
+    } while (exists);  
     return referenceNo;
 };
 

@@ -119,6 +119,9 @@ const uploadToS3 = async (file, folder) => {
 // Add new resident
 const addNewResident = async (req, res) => {
     try {
+        if (Array.isArray(req.body.reltohouseholdhead)) {
+            req.body.reltohouseholdhead = req.body.reltohouseholdhead[0];  // Use the first element if it's an array
+        }
         const {
             email,
             firstName,
@@ -136,6 +139,7 @@ const addNewResident = async (req, res) => {
             occupation,
             civilStatus,
             roleinHousehold,
+            reltohouseholdhead,
             householdID,
             voter,
             indigent,
@@ -221,6 +225,7 @@ const addNewResident = async (req, res) => {
             occupation,
             civilStatus,
             roleinHousehold,
+            reltohouseholdhead,
             roleinBarangay: 'Resident',
             profilepic: profilepicUrl, // Save profile picture URL
             validIDs: validIDUrls, // Save valid ID URLs

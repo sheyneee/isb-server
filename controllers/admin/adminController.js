@@ -154,6 +154,7 @@ const addNewAdmin = async (req, res) => {
                 roleinBarangay,
                 roleinHousehold,
                 householdID,
+                reltohouseholdhead,  // relationship to household head field
                 religion,
                 indigent,
                 fourpsmember,
@@ -172,40 +173,45 @@ const addNewAdmin = async (req, res) => {
                 contactNumber
             } = req.body;
 
+                // Validate if reltohouseholdhead is required when roleinHousehold is "Household Member"
+                if (roleinHousehold === 'Household Member' && !reltohouseholdhead) {
+                    return res.status(400).json({ message: 'Relationship to household head is required for Household Member' });
+                }
+            
                 // Check required fields
                 if (!email || !password || !firstName || !lastName || !birthday || !birthplace || !nationality || !sex || !permanentAddress || !civilStatus || !occupation || !roleinBarangay || !contactNumber) {
                     return res.status(400).json({ message: 'Missing required fields' });
                 }
 
-                    // Check if permanentAddress has required subfields
-                    if (!permanentAddress.street || !permanentAddress.houseNo) {
-                        return res.status(400).json({ message: 'Permanent address is missing required fields (street and houseNo)' });
-                    }
+                // Check if permanentAddress has required subfields
+                if (!permanentAddress.street || !permanentAddress.houseNo) {
+                    return res.status(400).json({ message: 'Permanent address is missing required fields (street and houseNo)' });
+                }
 
-                    // Check if the admin already exists
-                    const existingAdmin = await Admin.findOne({ email });
-                    if (existingAdmin) {
-                        return res.status(400).json({ message: 'Admin with this email already exists' });
-                    }
+                // Check if the admin already exists
+                const existingAdmin = await Admin.findOne({ email });
+                if (existingAdmin) {
+                    return res.status(400).json({ message: 'Admin with this email already exists' });
+                }
 
-                    // Fetch a barangay to associate with the new admin
-                    const barangay = await Barangay.findOne();
-                    if (!barangay) {
-                        return res.status(404).json({ message: 'No barangay found' });
-                    }
+                // Fetch a barangay to associate with the new admin
+                const barangay = await Barangay.findOne();
+                if (!barangay) {
+                    return res.status(404).json({ message: 'No barangay found' });
+                }
 
-                    // Ensure there is only one Barangay Captain
-                    if (roleinBarangay === 'Barangay Captain') {
-                        const existingCaptain = await Admin.findOne({ roleinBarangay: 'Barangay Captain', barangay: barangay._id });
-                        if (existingCaptain) {
-                            return res.status(400).json({ message: 'A Barangay Captain already exists for this barangay.' });
-                        }
+                // Ensure there is only one Barangay Captain
+                if (roleinBarangay === 'Barangay Captain') {
+                    const existingCaptain = await Admin.findOne({ roleinBarangay: 'Barangay Captain', barangay: barangay._id });
+                    if (existingCaptain) {
+                        return res.status(400).json({ message: 'A Barangay Captain already exists for this barangay.' });
                     }
+                }
 
-                    // Restrict certain roles
-                    if (['Secretary', 'Kagawad'].includes(roleinBarangay) && req.user.roleinBarangay !== 'Barangay Captain') {
-                        return res.status(403).json({ message: 'Only a Barangay Captain can assign Secretary or Kagawad roles' });
-                    }
+                // Restrict certain roles
+                if (['Secretary', 'Kagawad'].includes(roleinBarangay) && req.user.roleinBarangay !== 'Barangay Captain') {
+                    return res.status(403).json({ message: 'Only a Barangay Captain can assign Secretary or Kagawad roles' });
+                }
 
                     // Create the new admin
                     const newAdmin = new Admin({
@@ -226,6 +232,7 @@ const addNewAdmin = async (req, res) => {
                         occupation,
                         roleinBarangay,
                         roleinHousehold,
+                        reltohouseholdhead,
                         religion,
                         indigent,
                         fourpsmember,
@@ -275,8 +282,9 @@ const addNewAdmin = async (req, res) => {
                 presentAddress,
                 civilStatus,
                 occupation,
-                roleinBarangay: 'Resident', // Fixed role for resident
+                roleinBarangay: 'Resident',
                 roleinHousehold,
+                reltohouseholdhead,  
                 religion,
                 indigent,
                 fourpsmember,

@@ -50,6 +50,20 @@ const uploadToS3 = async (file) => {
     }
 };
 
+// Helper function to generate a random 6-digit number
+// Helper function to generate a unique ReferenceNo in the format 'IR-2024-XXXXXX'
+const generateRandomReferenceNo = () => {
+    const year = new Date().getFullYear();  // Get the current year
+    const randomDigits = Math.floor(100000 + Math.random() * 900000).toString(); // Generate random 6-digit number
+    return `IR-${year}-${randomDigits}`;
+};
+
+// Helper function to check if a generated ReferenceNo is unique
+const isReferenceNoUnique = async (referenceNo) => {
+    const report = await IncidentReport.findOne({ ReferenceNo: referenceNo });
+    return !report;  // Return true if no report found, meaning the ReferenceNo is unique
+};
+
 // Controller to handle incident report creation
 const createIncidentReport = async (req, res) => {
     try {
@@ -80,6 +94,16 @@ const createIncidentReport = async (req, res) => {
             }))
         ) : [];
 
+           
+        let ReferenceNo;
+        let isUnique = false;
+
+        // Keep generating ReferenceNo until we find a unique one
+        while (!isUnique) {
+            ReferenceNo = generateRandomReferenceNo();
+            isUnique = await isReferenceNoUnique(ReferenceNo);
+        }
+
         // Create the incident report
         const newIncidentReport = new IncidentReport({
             complainantID,
@@ -87,6 +111,7 @@ const createIncidentReport = async (req, res) => {
             complainantname,
             typeofcomplaint,
             incidentdescription,
+            ReferenceNo,
             dateAndTimeofIncident, // Record the date and time of the incident
             Attachment: attachmentFiles,  // Store the S3 URLs for the attachments
         });

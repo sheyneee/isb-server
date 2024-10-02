@@ -110,10 +110,18 @@ const residentSchema = new mongoose.Schema({
         required: [true, 'Role is required'],
         enum: ['Household Head', 'Household Member']
     },
-    reltohouseholdhead:{
-        type: String,
-        enum: ['Wife','Husband', 'Son', 'Daughter', 'Niece', 'Grand Daughter','Grand Son', 'Uncle','Aunt', 'Cousin']
-    },
+    reltohouseholdhead: {
+        type: String, 
+        validate: {
+            validator: function (value) {
+                if (this.roleinHousehold === 'Household Member' && !value) {
+                    return false;
+                }
+                return true;
+            },
+            message: 'Relationship to household head is required for household members.'
+        }
+    },  
     voter: {
         type: Boolean,
         default: false
