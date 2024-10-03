@@ -6,58 +6,55 @@ const adminSchema = new mongoose.Schema({
         type: String, 
         unique: true 
     },
-    profilepic: String,
-    email: { 
-        type: String, 
-        required: true, 
-        unique: true, 
-        trim: true, 
-        lowercase: true 
-    },
-    password: { 
-        type: String, 
-        required: true 
+    email: {
+        type: String,
+        required: [true, 'Email is required'],
+        unique: true,
+        trim: true,
+        lowercase: true
     },
     householdID: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Household'
     },
-    firstName: { 
-        type: String, 
-        required: true 
+    password: {
+        type: String,
+        required:[true, 'Password is required'],
+    },
+    profilepic: String,
+    firstName: {
+        type: String,
+        required: [true, 'First name is required']
     },
     middleName: String,
     suffix: {
         type: String,
-    },   
-    lastName: { 
-        type: String, 
-        required: true 
+    },               
+    lastName: {
+        type: String,
+        required: [true, 'Last Name is required']
     },
-    barangay: { 
-        type: mongoose.Schema.Types.ObjectId, 
-        ref: 'Barangay', 
-        required: true 
+    barangay: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Barangay',
+        required: [true, 'Barangay is required']
     },
-    birthday: { 
-        type: Date, 
-        required: [true, 'Birthday is required'] 
+    birthday: {
+        type: Date,
+        required: [true, 'Birthday is required']
     },
     birthplace: {
         type: String,
         required: [true, 'Birthplace is required']
     },
-    age: { 
-        type: Number 
-    },
-    sex: { 
-        type: String, 
-        required: true, 
-        enum: ['Male', 'Female'] 
+    age: Number,
+    sex: {
+        type: String,
+        required: [true, 'Sex is required'],
+        enum: ['Male', 'Female']
     },
     contactNumber: {
         type: String,
-        required: [true, 'Contact Number is required']
     },
     permanentAddress: {
         street: {
@@ -87,17 +84,19 @@ const adminSchema = new mongoose.Schema({
         houseNo: {
             type: String,
         },
-        subdivision: String
+        subdivision: String,
+        barangay: String,
+        city: String,
+        province: String,
+        region: String,
+        postalcode: String,
     },
-    nationality: { 
-        type: String, 
-        required: [true, 'Nationality is required'] 
+    nationality: {
+        type: String,
+        required: [true, 'Nationality is required']
     },
     religion: String,
-    occupation: { 
-        type: String, 
-        required: true 
-    },
+    occupation: String,
     civilStatus: {
         type: String,
         required: [true, 'Civil Status is required'],
@@ -113,9 +112,18 @@ const adminSchema = new mongoose.Schema({
         required: [true, 'Role is required'],
         enum: ['Household Head', 'Household Member']
     },
-    reltohouseholdhead:{
-        type: String
-    },
+    reltohouseholdhead: {
+        type: String, 
+        validate: {
+            validator: function (value) {
+                if (this.roleinHousehold === 'Household Member' && !value) {
+                    return false;
+                }
+                return true;
+            },
+            message: 'Relationship to household head is required for household members.'
+        }
+    },  
     voter: {
         type: Boolean,
         default: false
@@ -150,7 +158,7 @@ const adminSchema = new mongoose.Schema({
     philhealth_num: String,
     tin_num: String,
     validIDs: {
-        type: [String],
+        type: [String], 
         default: []
     },
     lastLogin: Date,

@@ -73,7 +73,7 @@ const uploadToS3 = async (file, folder) => {
 // Combined upload middleware for both profilepic and validIDs
 const uploadFiles = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 50 * 1024 * 1024 }, // Set file size limit (25MB)
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
     fileFilter: (req, file, cb) => {
         const allowedFileTypes = {
             profilepic: ['image/png', 'image/jpeg', 'image/jpg'],
@@ -117,61 +117,65 @@ const sendVerificationEmail = async (user, req) => {
 
 const addNewAdmin = async (req, res) => {
     try {
-        // Use the combined upload middleware
-        uploadFiles(req, res, async (err) => {
-            if (err) {
-                return res.status(400).json({ message: err.message });
-            }
 
-            // Check for files and process them
-            let profilepicUrl = '';
-            if (req.files && req.files.profilepic && req.files.profilepic.length > 0) {
-                profilepicUrl = await uploadToS3(req.files.profilepic[0], 'admin/profilepics');
-            }
+        // Check for profilepic and upload to S3 if available
+        let profilepicUrl = '';
+        if (req.files && req.files.profilepic && req.files.profilepic.length > 0) {
+            profilepicUrl = await uploadToS3(req.files.profilepic[0], 'admin/profilepics');
+        }
 
-            let validIDUrls = [];
-            if (req.files && req.files.validIDs && req.files.validIDs.length > 0) {
-                validIDUrls = await Promise.all(
-                    req.files.validIDs.map(file => uploadToS3(file, 'admin/validids'))
-                );
-            }
-            // Extract other fields from req.body
-            const {
-                email,
-                password,
-                firstName,
-                middleName,
-                lastName,
-                suffix,
-                birthday,
-                birthplace,
-                nationality,
-                sex,
-                permanentAddress,
-                presentAddress,
-                civilStatus,
-                occupation,
-                roleinBarangay,
-                roleinHousehold,
-                householdID,
-                reltohouseholdhead,  // relationship to household head field
-                religion,
-                indigent,
-                fourpsmember,
-                soloparent,
-                pwd,
-                soloparentid_num,
-                pwdid_num,
-                seniorCitizen,
-                seniorcitizenid_num,
-                philsys_num,
-                voters_id,
-                sss_num,
-                pagibig_num,
-                philhealth_num,
-                tin_num,
-                contactNumber
-            } = req.body;
+        // Check for validIDs and upload to S3 if available
+        let validIDUrls = [];
+        if (req.files && req.files.validIDs && req.files.validIDs.length > 0) {
+            validIDUrls = await Promise.all(
+                req.files.validIDs.map(file => uploadToS3(file, 'admin/validids'))
+            );
+        }
+
+        // Extract other fields from req.body
+        const {
+            email,
+            password,
+            firstName,
+            middleName,
+            lastName,
+            suffix,
+            birthday,
+            birthplace,
+            nationality,
+            sex,
+            permanentAddress,
+            presentAddress,
+            civilStatus,
+            occupation,
+            roleinBarangay,
+            roleinHousehold,
+            householdID,
+            reltohouseholdhead,  
+            religion,
+            indigent,
+            fourpsmember,
+            soloparent,
+            pwd,
+            soloparentid_num,
+            pwdid_num,
+            seniorCitizen,
+            seniorcitizenid_num,
+            philsys_num,
+            voters_id,
+            sss_num,
+            pagibig_num,
+            philhealth_num,
+            tin_num,
+            contactNumber
+        } = req.body;
+
+                if (!email || !password || !firstName || !lastName || !birthday || !birthday || !birthplace || !nationality || !sex || !permanentAddress || !civilStatus ||
+                    !occupation || 
+                    !roleinBarangay || 
+                    !roleinHousehold || !religion || !contactNumber) {
+                    return res.status(400).json({ message: 'Missing required fields' });
+                }   
 
                 // Validate if reltohouseholdhead is required when roleinHousehold is "Household Member"
                 if (roleinHousehold === 'Household Member' && !reltohouseholdhead) {
@@ -207,7 +211,7 @@ const addNewAdmin = async (req, res) => {
                         return res.status(400).json({ message: 'A Barangay Captain already exists for this barangay.' });
                     }
                 }
-
+            
                 // Restrict certain roles
                 if (['Secretary', 'Kagawad'].includes(roleinBarangay) && req.user.roleinBarangay !== 'Barangay Captain') {
                     return res.status(403).json({ message: 'Only a Barangay Captain can assign Secretary or Kagawad roles' });
@@ -348,12 +352,10 @@ const addNewAdmin = async (req, res) => {
             }
 
             res.status(201).json({ message: "Successfully added a new admin." });
-        });
-    } catch (err) {
-        res.status(500).json({ message: 'Something went wrong', error: err.message });
-    }
-};
-
+        } catch (err) {
+            res.status(500).json({ message: 'Something went wrong', error: err.message });
+        }
+    };
 
 
 const verifyEmail = async (req, res) => {
