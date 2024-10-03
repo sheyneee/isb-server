@@ -211,12 +211,6 @@ const addNewAdmin = async (req, res) => {
                         return res.status(400).json({ message: 'A Barangay Captain already exists for this barangay.' });
                     }
                 }
-            
-                // Restrict certain roles
-                if (['Secretary', 'Kagawad'].includes(roleinBarangay) && req.user.roleinBarangay !== 'Barangay Captain') {
-                    return res.status(403).json({ message: 'Only a Barangay Captain can assign Secretary or Kagawad roles' });
-                }
-
                     // Create the new admin
                     const newAdmin = new Admin({
                         email,
