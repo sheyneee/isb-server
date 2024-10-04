@@ -32,6 +32,16 @@ router.get('/residents/:id', residentController.getResidentById);
 router.put('/residents/:id', residentController.upload, residentController.updateResidentById);
 router.delete('/residents/:id', isAuthenticated, residentController.deleteResidentById);
 
+// Forgot password route
+router.post('/resident/forgot-password', residentController.forgotPassword);
+
+// Reset password route
+router.post('/resident/reset-password', residentController.resetPassword);
+
+// Verify security code route
+router.post('/resident/verify-security-code', residentController.verifySecurityCode);
+
+
 // Resident approval and denial
 router.put('/residents/approve/:id', isAuthenticated, isAdmin, residentController.approveResident);
 router.put('/residents/deny/:id', isAuthenticated, isAdmin, residentController.denyResident);

@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const multer = require('multer');
 require('dotenv').config(); // Load environment variables
+const crypto = require('crypto');
 
 // Create a Nodemailer transporter using Gmail
 const transporter = nodemailer.createTransport({
@@ -533,6 +534,106 @@ const resendVerificationEmail = async (req, res) => {
     }
 };
 
+const forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+        const resident = await Resident.findOne({ email });
+
+        if (!resident) {
+            return res.status(404).json({ message: 'Resident not found with this email' });
+        }
+
+        // Generate a 6-digit random number
+        const resetCode = crypto.randomInt(100000, 999999).toString();
+
+        // Set the reset token and expiry (1 hour from now)
+        resident.resetPasswordToken = resetCode;
+        resident.resetPasswordExpiry = Date.now() + 3600000; // 1 hour expiration
+        await resident.save();
+
+        // Send email with the reset code
+        const mailOptions = {
+            from: process.env.GMAIL_USER,
+            to: resident.email,
+            subject: 'Password Reset Code',
+            html: `<p>Your password reset code is: <strong>${resetCode}</strong></p>
+                   <p>This code will expire in 1 hour.</p>`
+        };
+
+        await transporter.sendMail(mailOptions);
+
+        return res.status(200).json({ message: 'Reset code sent to email' });
+    } catch (error) {
+        console.error('Error in forgotPassword:', error);
+        res.status(500).json({ message: 'Something went wrong', error });
+    }
+};
+
+const resetPassword = async (req, res) => {
+    try {
+        const { email, resetCode, newPassword } = req.body;
+
+        // Find the resident using email
+        const resident = await Resident.findOne({ email });
+
+        if (!resident) {
+            return res.status(404).json({ message: 'Resident not found' });
+        }
+
+        // Check if the reset code matches and if it's still valid (not expired)
+        if (resident.resetPasswordToken !== resetCode || resident.resetPasswordExpiry < Date.now()) {
+            return res.status(400).json({ message: 'Invalid or expired reset code' });
+        }
+
+        // Validate password strength
+        if (newPassword.length < 6) {
+            return res.status(400).json({ message: 'Password must be at least 6 characters long.' });
+        }
+
+        const weakPasswords = ['123456', 'password', '123456789', '12345678', 'qwerty', 'abc123', '111111'];
+        if (weakPasswords.includes(newPassword.toLowerCase())) {
+            return res.status(400).json({ message: 'Please choose a more secure password.' });
+        }
+
+        // Update the password and clear the reset token and expiry
+        resident.password = newPassword;
+        resident.resetPasswordToken = undefined;
+        resident.resetPasswordExpiry = undefined;
+
+        // Save the updated resident record
+        await resident.save();
+
+        res.status(200).json({ message: 'Password reset successfully' });
+    } catch (error) {
+        console.error('Error in resetPassword:', error);
+        res.status(500).json({ message: 'Something went wrong', error });
+    }
+};
+
+
+const verifySecurityCode = async (req, res) => {
+    try {
+        const { email, securityCode } = req.body;
+
+        // Find the resident by email
+        const resident = await Resident.findOne({ email });
+
+        if (!resident) {
+            return res.status(404).json({ message: 'Resident not found' });
+        }
+
+        // Check if the security code matches and hasn't expired
+        if (resident.resetPasswordToken !== securityCode || resident.resetPasswordExpiry < Date.now()) {
+            return res.status(400).json({ message: 'Invalid or expired security code' });
+        }
+
+        res.status(200).json({ message: 'Security code verified successfully' });
+    } catch (error) {
+        console.error('Error in verifySecurityCode:', error);
+        res.status(500).json({ message: 'Something went wrong', error });
+    }
+};
+
 
 
 module.exports = {
@@ -545,7 +646,10 @@ module.exports = {
     approveResident,
     denyResident,
     deleteResidentById,
+    resetPassword,
+    forgotPassword,
     sendVerificationEmail,
     verifyEmail,
-    resendVerificationEmail    
+    resendVerificationEmail,
+    verifySecurityCode    
 };

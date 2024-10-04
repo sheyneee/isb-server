@@ -189,7 +189,14 @@ const residentSchema = new mongoose.Schema({
     },
     verificationTokenExpiry: {
         type: Date
+    },
+    resetPasswordToken: {
+        type: String
+    },
+    resetPasswordExpiry: {
+        type: Date
     }
+
 });
 
 // Pre-save middleware to handle the assignment of barangay, residentID, and dynamic age calculation

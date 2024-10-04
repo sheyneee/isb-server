@@ -5,17 +5,18 @@ const barangaySchema = new mongoose.Schema({
     barangayName: {
         type: String,
         required: [true, 'Barangay Name is required'],
-        default: '52 - IPIL', 
-        immutable: true 
+ 
     },
     region: {
         type: String,
         required: [true, 'Region is required'],
-        default: 'IV-A CALABARZON', 
-        immutable: true 
+ 
     },
     email:{
         type: String
+    },
+    logo:{
+    type: String
     },
     contactnumber:{
         type: String
@@ -23,20 +24,17 @@ const barangaySchema = new mongoose.Schema({
     province: {
         type: String,
         required: [true, 'Province'],
-        default: 'Cavite', 
-        immutable: true 
+
     },
     municipality: {
         type: String,
         required: [true, 'City is required'],
-        default: 'Cavite City', 
-        immutable: true 
+
     },
     postalcode: {
         type: Number,
         required: [true, 'Postal Code is required'],
-        default: 4100, 
-        immutable: true 
+
     },
     location:{
         type: String,
