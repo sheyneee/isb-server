@@ -377,7 +377,8 @@ const verifyEmail = async (req, res) => {
         admin.verificationTokenExpiry = undefined;
 
         await admin.save();
-        res.status(200).json({ message: 'Email verified successfully' });
+        return res.redirect('http://localhost:3000/?verified=true');
+        
     } catch (error) {
         console.error('Error verifying email:', error);
         res.status(500).json({ message: 'Error verifying email', error });

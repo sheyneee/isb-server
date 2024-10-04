@@ -504,8 +504,8 @@ const verifyEmail = async (req, res) => {
         // Save the resident after the update
         await resident.save();
 
-        // Send a success response
-        res.status(200).json({ message: 'Email verified successfully' });
+        return res.redirect('http://localhost:3000/?verified=true');
+
     } catch (error) {
         console.error('Error verifying email:', error);
         if (error.name === 'TokenExpiredError') {

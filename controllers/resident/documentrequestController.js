@@ -111,11 +111,6 @@ const createDocumentRequest = async (req, res) => {
             }))
         ) : [];
 
-        // If no valid IDs are uploaded, return an error
-        if (validIDFiles.length === 0) {
-            return res.status(400).json({ message: "At least one valid ID must be uploaded." });
-        }
-
         // Create and save the document request with the S3 URLs and generated ReferenceNo
         const newRequest = new DocumentRequest({
             requestedBy,

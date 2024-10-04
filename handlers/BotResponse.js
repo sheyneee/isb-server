@@ -1,6 +1,7 @@
 const axios = require('axios');
 const DocumentRequest = require('../models/resident/documentrequestModel');
 const Announcement = require('../models/admin/announcementModel');
+const IncidentReport = require('../models/resident/incidentFilingModel')
 let currentMessageId = 1;
 
 const predefinedAnswers = {
@@ -37,12 +38,12 @@ const generateChatWithBotResponse = (user) => {
 
 // Handles the bot's response logic
 const handleBotResponse = async (messageText, user, botMode) => {
-  const lowerCaseMessage = messageText.toLowerCase().trim();
+  const lowerCaseMessage = messageText.toLowerCase().trim(); // Always convert to lowercase
 
-  // Fetch announcements directly from the database
+  // Check for announcements
   if (lowerCaseMessage.includes('announcements')) {
     try {
-      // Fetch announcements from the Announcement model directly
+      // Fetch announcements from the Announcement model
       const announcements = await Announcement.find().sort({ created_at: -1 });
 
       if (announcements.length > 0) {
@@ -85,12 +86,11 @@ const handleBotResponse = async (messageText, user, botMode) => {
     }
   }
 
-  // Fetch document request history directly from the database
+  // Fetch document request history
   if (lowerCaseMessage.includes("document request history")) {
     try {
-      // Fetch document requests directly from the database using the user._id (resident ID)
       const documentRequests = await DocumentRequest.find({
-        requestedBy: user.userId,  // Assuming user.userId is the resident ID
+        requestedBy: user.userId,
       });
 
       if (documentRequests.length > 0) {
@@ -133,6 +133,53 @@ const handleBotResponse = async (messageText, user, botMode) => {
     }
   }
 
+    // Fetch incident report history
+    if (lowerCaseMessage.includes('incident report')) {
+      try {
+        const incidentReports = await IncidentReport.find({
+          complainantID: user.userId,
+        }).sort({ created_at: -1 });
+  
+        if (incidentReports.length > 0) {
+          let incidentReportText = "Here is your incident report history:\n";
+          incidentReports.forEach((report, index) => {
+            incidentReportText += `${index + 1}. ${report.ReferenceNo} - ${report.typeofcomplaint} - ${report.status} - ${new Date(report.created_at).toLocaleDateString()}\n`;
+          });
+  
+          return {
+            _id: currentMessageId++,
+            text: incidentReportText,
+            createdAt: new Date(),
+            user: {
+              _id: "bot",
+              name: "AmBot",
+            },
+          };
+        } else {
+          return {
+            _id: currentMessageId++,
+            text: "You have no incident report history.",
+            createdAt: new Date(),
+            user: {
+              _id: "bot",
+              name: "AmBot",
+            },
+          };
+        }
+      } catch (error) {
+        console.error('Error fetching incident report history:', error);
+        return {
+          _id: currentMessageId++,
+          text: "Sorry, I couldn't fetch your incident report history. Please try again later.",
+          createdAt: new Date(),
+          user: {
+            _id: "bot",
+            name: "AmBot",
+          },
+        };
+      }
+    }
+    
   // Handoff request to barangay official
   if (lowerCaseMessage.includes('chat with official')) {
     return {
@@ -146,7 +193,7 @@ const handleBotResponse = async (messageText, user, botMode) => {
     };
   }
 
-  // Default response
+
   return generatePredefinedResponse(lowerCaseMessage, user);
 };
 
