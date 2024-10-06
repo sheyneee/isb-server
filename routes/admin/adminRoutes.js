@@ -16,5 +16,9 @@ router.get('/admin/:email', adminController.findAdminByEmail);
 router.get('/admin/id/:id', adminController.getAdminById);
 router.get('/admin/verify/:token', adminController.verifyEmail);
 router.post('/admin/resend-verification', adminController.resendVerificationEmail);
+router.post('/admin/forgot-password', adminController.forgotPassword);
+router.post('/admin/reset-password', adminController.resetPassword);
+router.post('/admin/verify-security-code', adminController.verifySecurityCode);
+
 
 module.exports = router;

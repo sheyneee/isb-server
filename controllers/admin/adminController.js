@@ -9,6 +9,8 @@ const nodemailer = require('nodemailer');
 const multer = require('multer');
 require('dotenv').config(); 
 const path = require('path');
+const crypto = require('crypto');
+const bcrypt = require('bcrypt'); // Add this at the top
 
 
 // Create a Nodemailer transporter using Gmail
@@ -177,6 +179,9 @@ const addNewAdmin = async (req, res) => {
                     return res.status(400).json({ message: 'Missing required fields' });
                 }   
 
+                // Hash the password before saving it
+                const hashedPassword = await bcrypt.hash(password, 10); // Salt rounds = 10
+
                 // Validate if reltohouseholdhead is required when roleinHousehold is "Household Member"
                 if (roleinHousehold === 'Household Member' && !reltohouseholdhead) {
                     return res.status(400).json({ message: 'Relationship to household head is required for Household Member' });
@@ -214,7 +219,7 @@ const addNewAdmin = async (req, res) => {
                     // Create the new admin
                     const newAdmin = new Admin({
                         email,
-                        password,
+                        password: hashedPassword,
                         firstName,
                         middleName,
                         lastName,
@@ -263,10 +268,13 @@ const addNewAdmin = async (req, res) => {
                 // Save the updated barangay
             await barangay.save();
 
+            // Hash the password for the resident account
+            const hashedResidentPassword = await bcrypt.hash(password, 10); // Hash the resident password
+
             // Create the corresponding resident account
             const newResident = new Resident({
                 email,
-                password,
+                password: hashedResidentPassword,
                 firstName,
                 middleName,
                 lastName,
@@ -427,8 +435,9 @@ const signInAdmin = async (req, res) => {
             return res.status(401).json({ message: "Incorrect email" });
         }
 
-        // Check if the password is correct
-        if (password !== admin.password) {
+        // Compare the hashed password with the password entered by the user
+        const isPasswordCorrect = await bcrypt.compare(password, admin.password);
+        if (!isPasswordCorrect) {
             return res.status(401).json({ message: "Incorrect password" });
         }
 
@@ -616,6 +625,110 @@ const getAdminById = async (req, res) => {
     }
 };
 
+// Forgot Password function
+const forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+        const admin = await Admin.findOne({ email });
+
+        if (!admin) {
+            return res.status(404).json({ message: 'Admin not found with this email' });
+        }
+
+        // Generate a 6-digit random number as reset code
+        const resetCode = crypto.randomInt(100000, 999999).toString();
+
+        // Set the reset token and expiry (1 hour from now)
+        admin.resetPasswordToken = resetCode;
+        admin.resetPasswordExpiry = Date.now() + 3600000; // 1 hour expiration
+        await admin.save();
+
+        // Send email with the reset code
+        const mailOptions = {
+            from: process.env.GMAIL_USER,
+            to: admin.email,
+            subject: 'Password Reset Code',
+            html: `<p>Your password reset code is: <strong>${resetCode}</strong></p>
+                   <p>This code will expire in 1 hour.</p>`
+        };
+
+        await transporter.sendMail(mailOptions);
+
+        return res.status(200).json({ message: 'Reset code sent to email' });
+    } catch (error) {
+        console.error('Error in forgotPassword:', error);
+        res.status(500).json({ message: 'Something went wrong', error });
+    }
+};
+
+// Reset Password function
+const resetPassword = async (req, res) => {
+    try {
+        const { email, resetCode, newPassword } = req.body;
+
+        const admin = await Admin.findOne({ email });
+
+        if (!admin) {
+            return res.status(404).json({ message: 'Admin not found' });
+        }
+
+        // Check if the reset code matches and is still valid (not expired)
+        if (admin.resetPasswordToken !== resetCode || admin.resetPasswordExpiry < Date.now()) {
+            return res.status(400).json({ message: 'Invalid or expired reset code' });
+        }
+
+        // Validate the new password strength
+        if (newPassword.length < 6) {
+            return res.status(400).json({ message: 'Password must be at least 6 characters long.' });
+        }
+
+        // List of weak passwords
+        const weakPasswords = ['123456', 'password', '123456789', '12345678', 'qwerty', 'abc123', '111111'];
+        if (weakPasswords.includes(newPassword.toLowerCase())) {
+            return res.status(400).json({ message: 'Please choose a more secure password.' });
+        }
+
+        // Hash the new password before saving it
+        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+        // Update the password and clear the reset token and expiry
+        admin.password = hashedNewPassword;
+        admin.resetPasswordToken = undefined;
+        admin.resetPasswordExpiry = undefined;
+
+        await admin.save();
+
+        res.status(200).json({ message: 'Password reset successfully' });
+    } catch (error) {
+        console.error('Error in resetPassword:', error);
+        res.status(500).json({ message: 'Something went wrong', error });
+    }
+};
+
+
+// Verify Security Code function
+const verifySecurityCode = async (req, res) => {
+    try {
+        const { email, securityCode } = req.body;
+
+        const admin = await Admin.findOne({ email });
+
+        if (!admin) {
+            return res.status(404).json({ message: 'Admin not found' });
+        }
+
+        // Check if the security code matches and hasn't expired
+        if (admin.resetPasswordToken !== securityCode || admin.resetPasswordExpiry < Date.now()) {
+            return res.status(400).json({ message: 'Invalid or expired security code' });
+        }
+
+        res.status(200).json({ message: 'Security code verified successfully' });
+    } catch (error) {
+        console.error('Error in verifySecurityCode:', error);
+        res.status(500).json({ message: 'Something went wrong', error });
+    }
+};
+
 module.exports = {
     findAllAdmins,
     signInAdmin,
@@ -628,4 +741,7 @@ module.exports = {
     verifyEmail,
     sendVerificationEmail,
     uploadFiles,
+    forgotPassword,
+    resetPassword,
+    verifySecurityCode,
 };

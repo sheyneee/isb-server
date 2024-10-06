@@ -179,7 +179,13 @@ const adminSchema = new mongoose.Schema({
     },
     verificationTokenExpiry: {
         type: Date
-    }
+    },
+    resetPasswordToken: {
+        type: String,
+    },
+    resetPasswordExpiry: {
+        type: Date,
+    },
 });
 
 // Pre-save middleware to handle barangay and dynamic age calculation

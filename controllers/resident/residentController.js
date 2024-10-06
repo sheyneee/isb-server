@@ -8,6 +8,7 @@ const nodemailer = require('nodemailer');
 const multer = require('multer');
 require('dotenv').config(); // Load environment variables
 const crypto = require('crypto');
+const bcrypt = require('bcrypt');
 
 // Create a Nodemailer transporter using Gmail
 const transporter = nodemailer.createTransport({
@@ -205,98 +206,100 @@ const addNewResident = async (req, res) => {
             const currentYear = new Date().getFullYear();
             const sanitizedLastName = lastName.replace(/\s+/g, '').toLowerCase();
             password = `${currentYear}${sanitizedLastName}${firstName.charAt(0).toLowerCase()}${middleName ? middleName.charAt(0).toLowerCase() : ''}`;
-        }
 
-        const newResident = new Resident({
-            email,
-            password,
-            firstName,
-            middleName,
-            lastName,
-            suffix,
-            barangay: barangay._id,
-            birthday,
-            birthplace,
-            sex,
-            contactNumber,
-            permanentAddress,
-            presentAddress,
-            nationality,
-            religion,
-            occupation,
-            civilStatus,
-            roleinHousehold,
-            reltohouseholdhead,
-            roleinBarangay: 'Resident',
-            profilepic: profilepicUrl, // Save profile picture URL
-            validIDs: validIDUrls, // Save valid ID URLs
-            voter,
-            indigent,
-            fourpsmember,
-            soloparent,
-            pwd,
-            seniorCitizen,
-            soloparentid_num,
-            pwdid_num,
-            seniorcitizenid_num,
-            philsys_num,
-            voters_id,
-            sss_num,
-            pagibig_num,
-            philhealth_num,
-            tin_num,
-            accountStatus: 'Pending',
-            emailVerified: false // Initially not verified
-        });
+            // Hash the password
+            const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Save the new resident
-        await newResident.save();
-
-        // If the resident is a family member, update the household
-        if (roleinHousehold === 'Household Member' && householdID) {
-            const household = await Household.findOne({ householdID: householdID });
-
-            if (!household) {
-                return res.status(404).json({ message: 'Household not found' });
-            }
-
-            // Update the household with the new resident
-            household.members.push(newResident._id);
-            await household.save();
-
-            // Update the resident's householdID field
-            newResident.householdID = household._id;
-            await newResident.save();
-        }
-
-        // If the resident is the head of the family, create a new household
-        if (roleinHousehold === 'Household Head') {
-            const maxHousehold = await Household.findOne().sort('-householdID').exec();
-            const householdID = maxHousehold ? maxHousehold.householdID + 1 : 1;
-
-            const newHousehold = new Household({
-                householdID,
-                householdHead: newResident._id,
-                contactNumber: newResident.contactNumber,
-                members: [newResident._id]
+            const newResident = new Resident({
+                email,
+                password: hashedPassword,  // Use the hashed password
+                firstName,
+                middleName,
+                lastName,
+                suffix,
+                barangay: barangay._id,
+                birthday,
+                birthplace,
+                sex,
+                contactNumber,
+                permanentAddress,
+                presentAddress,
+                nationality,
+                religion,
+                occupation,
+                civilStatus,
+                roleinHousehold,
+                reltohouseholdhead,
+                roleinBarangay: 'Resident',
+                profilepic: profilepicUrl, // Save profile picture URL
+                validIDs: validIDUrls, // Save valid ID URLs
+                voter,
+                indigent,
+                fourpsmember,
+                soloparent,
+                pwd,
+                seniorCitizen,
+                soloparentid_num,
+                pwdid_num,
+                seniorcitizenid_num,
+                philsys_num,
+                voters_id,
+                sss_num,
+                pagibig_num,
+                philhealth_num,
+                tin_num,
+                accountStatus: 'Pending',
+                emailVerified: false // Initially not verified
             });
 
-            // Save the new household
-            await newHousehold.save();
-            newResident.householdID = newHousehold._id;
+            // Save the new resident
             await newResident.save();
-        }
 
-        // Send verification email if email is provided
-        if (email) {
-            await sendVerificationEmail(newResident, req);
-        }
+            // If the resident is a family member, update the household
+            if (roleinHousehold === 'Household Member' && householdID) {
+                const household = await Household.findOne({ householdID: householdID });
 
-        // Send success response with newResident object
-        if (!res.headersSent) {
-            return res.status(201).json({ newResident, message: 'Resident added successfully.' });
-        }
+                if (!household) {
+                    return res.status(404).json({ message: 'Household not found' });
+                }
 
+                // Update the household with the new resident
+                household.members.push(newResident._id);
+                await household.save();
+
+                // Update the resident's householdID field
+                newResident.householdID = household._id;
+                await newResident.save();
+            }
+
+            // If the resident is the head of the family, create a new household
+            if (roleinHousehold === 'Household Head') {
+                const maxHousehold = await Household.findOne().sort('-householdID').exec();
+                const householdID = maxHousehold ? maxHousehold.householdID + 1 : 1;
+
+                const newHousehold = new Household({
+                    householdID,
+                    householdHead: newResident._id,
+                    contactNumber: newResident.contactNumber,
+                    members: [newResident._id]
+                });
+
+                // Save the new household
+                await newHousehold.save();
+                newResident.householdID = newHousehold._id;
+                await newResident.save();
+            }
+
+            // Send verification email if email is provided
+            if (email) {
+                await sendVerificationEmail(newResident, req);
+            }
+
+            // Send success response with newResident object
+            if (!res.headersSent) {
+                return res.status(201).json({ newResident, message: 'Resident added successfully.' });
+            }
+        }
     } catch (err) {
         console.error('Error in addNewResident:', err);
 
@@ -306,6 +309,7 @@ const addNewResident = async (req, res) => {
         }
     }
 };
+
 
 // Approve a resident
 const approveResident = async (req, res) => {
@@ -379,10 +383,11 @@ const signInResident = async (req, res) => {
             return res.status(401).json({ message: "Incorrect email or password" });
         }
 
-        // Check if the password is correct
-        if (password !== resident.password) {
-            return res.status(401).json({ message: "Incorrect password" });
-        }
+         // Check if the password is correct using bcrypt.compare
+         const isPasswordValid = await bcrypt.compare(password, resident.password);
+         if (!isPasswordValid) {
+             return res.status(401).json({ message: "Incorrect email or password" });
+         }
 
         // Check if the email is verified
         if (!resident.emailVerified) {
@@ -595,8 +600,10 @@ const resetPassword = async (req, res) => {
             return res.status(400).json({ message: 'Please choose a more secure password.' });
         }
 
+        const hashedPassword = await bcrypt.hash(newPassword, 10); // Salt rounds = 10
+
         // Update the password and clear the reset token and expiry
-        resident.password = newPassword;
+        resident.password = hashedPassword;
         resident.resetPasswordToken = undefined;
         resident.resetPasswordExpiry = undefined;
 
