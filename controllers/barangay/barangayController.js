@@ -166,8 +166,21 @@ const getDashboardStats = async (req, res) => {
     }
 };
 
+// Get the only barangay (assuming there is just one)
+const getSingleBarangay = async (req, res) => {
+    try {
+        const barangay = await Barangay.findOne(); 
+        if (!barangay) {
+            return res.status(404).json({ message: 'No Barangay found' });
+        }
+        res.json({ barangay });
+    } catch (error) {
+        res.status(500).json({ message: 'Something went wrong', error });
+    }
+};
 
 module.exports = {
+    getSingleBarangay,
     createBarangay,
     getAllBarangays,
     getBarangayById,
