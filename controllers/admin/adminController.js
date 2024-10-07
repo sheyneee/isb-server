@@ -432,7 +432,7 @@ const signInAdmin = async (req, res) => {
 
         // Check if the admin exists
         if (!admin) {
-            return res.status(401).json({ message: "Incorrect email" });
+            return res.status(404).json({ message: "User doesn't exist" });
         }
 
         // Compare the hashed password with the password entered by the user

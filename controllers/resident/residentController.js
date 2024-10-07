@@ -380,7 +380,7 @@ const signInResident = async (req, res) => {
 
         // Check if the resident exists
         if (!resident) {
-            return res.status(401).json({ message: "Incorrect email or password" });
+            return res.status(404).json({ message: "User doesn't exist" });
         }
 
          // Check if the password is correct using bcrypt.compare
