@@ -510,7 +510,7 @@ const verifyEmail = async (req, res) => {
         // Save the resident after the update
         await resident.save();
 
-        return res.redirect('http://localhost:3000/?verified=true');
+        return res.redirect('http://iservebarangay.com/?verified=true');
 
     } catch (error) {
         console.error('Error verifying email:', error);
