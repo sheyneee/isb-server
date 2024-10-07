@@ -70,7 +70,11 @@ const adminSchema = new mongoose.Schema({
             type: String,
             required: [true, 'House No. is required']
         },
-        subdivision: String
+        subdivision: String,
+        barangay: String,
+        city: String,
+        province: String,
+        region: String
     },
     presentAddress: {
         street: {
@@ -199,6 +203,10 @@ adminSchema.pre('save', async function (next) {
             if (!barangay) {
                 return next(new Error('No Barangay found to assign'));
             }
+            this.permanentAddress.barangay = barangay.barangayName;
+            this.permanentAddress.city = barangay.municipality;
+            this.permanentAddress.province = barangay.province;
+            this.permanentAddress.region = barangay.region;
             this.barangay = barangay._id;
 
             const currentYear = new Date().getFullYear();

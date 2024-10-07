@@ -68,7 +68,11 @@ const residentSchema = new mongoose.Schema({
             type: String,
             required: [true, 'House No. is required']
         },
-        subdivision: String
+        subdivision: String,
+        barangay: String,
+        city: String,
+        province: String,
+        region: String,
     },
     presentAddress: {
         street: {
@@ -212,7 +216,12 @@ residentSchema.pre('save', async function (next) {
             if (!barangay) {
                 return next(new Error('No Barangay found to assign'));
             }
-            this.barangay = barangay._id;
+             // Populate permanent address details based on the Barangay data
+             this.permanentAddress.barangay = barangay.barangayName;
+             this.permanentAddress.city = barangay.municipality;
+             this.permanentAddress.province = barangay.province;
+             this.permanentAddress.region = barangay.region;
+             this.barangay = barangay._id;
 
             // Assign Household if it's present
             if (this.householdID) {
