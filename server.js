@@ -5,8 +5,11 @@ const bodyParser = require('body-parser');
 const http = require('http');
 const socketIo = require('socket.io');
 const messageHandler = require('./handlers/message.handlers');
+const archivedCleanup = require('./handlers/archivedCleanup');
+
 require('./config/mongo_config');
 require('dotenv').config();
+archivedCleanup();
 
 const app = express();
 const server = http.createServer(app);

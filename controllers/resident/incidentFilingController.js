@@ -67,8 +67,17 @@ const isReferenceNoUnique = async (referenceNo) => {
 // Controller to handle incident report creation
 const createIncidentReport = async (req, res) => {
     try {
-        // Validate complainantByType and complainantID
-        const { complainantID, complainantByType, complainantname, typeofcomplaint, incidentdescription, dateAndTimeofIncident } = req.body;
+               const { 
+                complainantID, 
+                complainantByType, 
+                complainantname, 
+                respondentname, 
+                typeofcomplaint, 
+                incidentdescription, 
+                relieftobegranted, 
+                dateAndTimeofIncident, 
+                status 
+            } = req.body;
 
         if (!['Resident', 'Admin'].includes(complainantByType)) {
             return res.status(400).json({ message: "complainantByType must be either 'Resident' or 'Admin'" });
@@ -104,20 +113,34 @@ const createIncidentReport = async (req, res) => {
             isUnique = await isReferenceNoUnique(ReferenceNo);
         }
 
-        // Create the incident report
+        // Parse complainantname and respondentname if they are in JSON format
+        const parsedComplainantName = Array.isArray(complainantname) 
+            ? complainantname 
+            : JSON.parse(complainantname);
+
+        const parsedRespondentName = Array.isArray(respondentname) 
+            ? respondentname 
+            : JSON.parse(respondentname);
+
+        // Create the incident report with optional archived_at date if status is 'Archived'
         const newIncidentReport = new IncidentReport({
             complainantID,
             complainantByType,
-            complainantname,
+            complainantname: parsedComplainantName,
+            respondentname: parsedRespondentName,
             typeofcomplaint,
             incidentdescription,
+            relieftobegranted,
             ReferenceNo,
-            dateAndTimeofIncident, // Record the date and time of the incident
-            Attachment: attachmentFiles,  // Store the S3 URLs for the attachments
+            dateAndTimeofIncident,
+            Attachment: attachmentFiles,
+            status,
+            ...(status === 'Archived' && { archived_at: new Date() })
         });
 
         await newIncidentReport.save();
-        res.status(201).json({ message: "Incident report created successfully", report: newIncidentReport });
+        
+        res.status(201).json({  message: 'Incident report created successfully',referenceNo: newIncidentReport.ReferenceNo, report: newIncidentReport });
     } catch (error) {
         console.error('Error creating incident report:', error.stack);
         res.status(500).json({ message: "Failed to create incident report", error: error.message });
@@ -157,6 +180,7 @@ const getIncidentReportById = async (req, res) => {
 };
 
 // Controller to update an incident report
+// Controller to update an incident report
 const updateIncidentReport = async (req, res) => {
     try {
         const reportId = req.params.id;
@@ -164,6 +188,12 @@ const updateIncidentReport = async (req, res) => {
 
         if (!mongoose.Types.ObjectId.isValid(reportId)) {
             return res.status(400).json({ message: "Invalid report ID" });
+        }
+
+        // Find the existing report to compare the status
+        const existingReport = await IncidentReport.findById(reportId);
+        if (!existingReport) {
+            return res.status(404).json({ message: "Incident report not found" });
         }
 
         // Handle file uploads and store the attachments in S3
@@ -178,27 +208,38 @@ const updateIncidentReport = async (req, res) => {
             );
         }
 
+        // Prepare fields to be updated
+        let updatedFields = {
+            typeofcomplaint,
+            incidentdescription,
+            dateAndTimeofIncident,
+            status,
+            ...(attachmentFiles.length > 0 && { Attachment: attachmentFiles }),  // Update attachments only if new files are uploaded
+        };
+
+        // If changing to "Archived", set `archived_at` to the current date
+        if (status === 'Archived' && existingReport.status !== 'Archived') {
+            updatedFields.archived_at = new Date();
+        }
+
+        // If changing status from "Archived" to any other status, clear `archived_at`
+        if (status !== 'Archived' && existingReport.status === 'Archived') {
+            updatedFields.archived_at = null;
+        }
+
+        // Update the incident report
         const updatedReport = await IncidentReport.findByIdAndUpdate(
             reportId,
-            {
-                typeofcomplaint,
-                incidentdescription,
-                dateAndTimeofIncident,  // Update the date and time of the incident if modified
-                status,
-                ...(attachmentFiles.length > 0 && { Attachment: attachmentFiles }),  // Update attachments only if new files are uploaded
-            },
+            updatedFields,
             { new: true, runValidators: true }
         );
-
-        if (!updatedReport) {
-            return res.status(404).json({ message: "Incident report not found" });
-        }
 
         res.status(200).json({ message: "Incident report updated successfully", report: updatedReport });
     } catch (error) {
         res.status(500).json({ message: "Failed to update incident report", error: error.message });
     }
 };
+
 
 // Controller to delete an incident report
 const deleteIncidentReport = async (req, res) => {

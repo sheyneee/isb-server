@@ -20,7 +20,10 @@ const incidentReportSchema = new mongoose.Schema({
         required: true
     },
     complainantname:{
-        type: String,
+        type: [String],
+    },
+    respondentname:{
+        type: [String],
     },
     typeofcomplaint: { 
         type: String,
@@ -28,6 +31,10 @@ const incidentReportSchema = new mongoose.Schema({
     },
     incidentdescription:{
         type: String,
+        required: true
+    },
+    relieftobegranted:{
+        type:String,
         required: true
     },
     dateAndTimeofIncident:{
@@ -43,7 +50,7 @@ const incidentReportSchema = new mongoose.Schema({
     },
     status:{
         type: String,
-        enum: ['Pending', 'Active','Scheduled','Settled'],
+        enum: ['Pending', 'Active','Processing ','Verified','Settled', 'Archived'],
         default: 'Pending'
     },
     created_at: {
@@ -53,7 +60,35 @@ const incidentReportSchema = new mongoose.Schema({
     updated_at: {
         type: Date,
         default: Date.now
-    } 
+    },
+    archived_at: {
+        type: Date,
+        default: null 
+    },
+});
+
+// Pre-save middleware to handle 'archived_at' updates
+incidentReportSchema.pre('save', function (next) {
+    if (this.isModified('status')) {
+        if (this.status === 'Archived') {
+            this.archived_at = new Date();
+        } else if (this.status === 'Active') {
+            this.archived_at = null; // Reset the countdown if status changes back to Active
+        }
+    }
+    next();
+});
+
+// Virtual field for days until deletion
+incidentReportSchema.virtual('daysUntilDeletion').get(function () {
+    if (this.status !== 'Archived' || !this.archived_at) {
+        return null;
+    }
+    const now = new Date();
+    const deletionDate = new Date(this.archived_at);
+    deletionDate.setDate(deletionDate.getDate() + 90);
+    const daysLeft = Math.ceil((deletionDate - now) / (1000 * 60 * 60 * 24));
+    return daysLeft > 0 ? daysLeft : 0;
 });
 
 const IncidentReport = mongoose.model('IncidentReport', incidentReportSchema);
