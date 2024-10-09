@@ -16,7 +16,7 @@ const server = http.createServer(app);
 
 // CORS setup for Express (still needed for React.js web)
 app.use(cors({
-  origin: 'http://ec2-18-143-100-166.ap-southeast-1.compute.amazonaws.com:3000',
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
