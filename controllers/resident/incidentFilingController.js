@@ -180,7 +180,6 @@ const getIncidentReportById = async (req, res) => {
 };
 
 // Controller to update an incident report
-// Controller to update an incident report
 const updateIncidentReport = async (req, res) => {
     try {
         const reportId = req.params.id;
