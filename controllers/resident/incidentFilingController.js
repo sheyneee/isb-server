@@ -152,7 +152,30 @@ const createIncidentReport = async (req, res) => {
 const getAllIncidentReports = async (req, res) => {
     try {
         const reports = await IncidentReport.find().populate('complainantID');
-        res.status(200).json(reports);
+
+        // Calculate `daysUntilDeletion` for archived reports
+        const updatedReports = reports.map((report) => {
+            if (report.status === 'Archived' && report.archived_at) {
+                const archivedAt = new Date(report.archived_at);
+                const ninetyDaysAfter = new Date(archivedAt);
+                ninetyDaysAfter.setDate(archivedAt.getDate() + 90);
+
+                const daysUntilDeletion = Math.ceil(
+                    (ninetyDaysAfter - new Date()) / (1000 * 60 * 60 * 24)
+                );
+
+                // Add custom header for each archived report
+                res.setHeader(`X-Days-Until-Deletion-${report._id}`, daysUntilDeletion > 0 ? daysUntilDeletion : 0);
+                
+                return {
+                    ...report.toObject(),
+                    daysUntilDeletion: daysUntilDeletion > 0 ? daysUntilDeletion : 0,
+                };
+            }
+            return report.toObject();
+        });
+
+        res.status(200).json(updatedReports);
     } catch (error) {
         res.status(500).json({ message: "Failed to fetch incident reports", error: error.message });
     }
@@ -179,42 +202,71 @@ const getIncidentReportById = async (req, res) => {
     }
 };
 
-// Controller to update an incident report
 const updateIncidentReport = async (req, res) => {
     try {
         const reportId = req.params.id;
-        const { typeofcomplaint, incidentdescription, status, dateAndTimeofIncident } = req.body;
+        const { 
+            typeofcomplaint, 
+            incidentdescription, 
+            relieftobegranted, 
+            complainantname, 
+            respondentname, 
+            status, 
+            dateAndTimeofIncident,
+            removedAttachments 
+        } = req.body;
 
         if (!mongoose.Types.ObjectId.isValid(reportId)) {
             return res.status(400).json({ message: "Invalid report ID" });
         }
 
-        // Find the existing report to compare the status
         const existingReport = await IncidentReport.findById(reportId);
         if (!existingReport) {
             return res.status(404).json({ message: "Incident report not found" });
         }
 
-        // Handle file uploads and store the attachments in S3
         let attachmentFiles = [];
-        if (req.files) {
+        if (req.files && req.files.length > 0) {
             attachmentFiles = await Promise.all(
                 req.files.map(async (file) => ({
                     originalname: file.originalname,
                     mimetype: file.mimetype,
-                    url: await uploadToS3(file),
+                    url: await uploadToS3(file), // Implement your S3 upload logic
                 }))
             );
         }
 
-        // Prepare fields to be updated
+         // Handle removed attachments
+         const parsedRemovedAttachments = removedAttachments ? JSON.parse(removedAttachments) : [];
+         const remainingAttachments = existingReport.Attachment.filter(
+             (attachment) => !parsedRemovedAttachments.some((removed) => removed.url === attachment.url)
+         );
+
+          // Combine remaining attachments with newly uploaded ones
+        const updatedAttachmentList = [...remainingAttachments, ...attachmentFiles];
+
+        // Ensure that updatedAttachmentList is not empty
+        if (updatedAttachmentList.length === 0) {
+            return res.status(400).json({ message: "At least one Evidence is required." });
+        }
+
         let updatedFields = {
             typeofcomplaint,
             incidentdescription,
+            relieftobegranted,
             dateAndTimeofIncident,
-            status,
-            ...(attachmentFiles.length > 0 && { Attachment: attachmentFiles }),  // Update attachments only if new files are uploaded
+            updated_at: new Date(), // Update 'updated_at' field to the current date
+            Attachment: updatedAttachmentList, // Use the updated list of attachments
         };
+        
+        // Include complainantname and respondentname if they are provided
+        if (complainantname) {
+            updatedFields.complainantname = JSON.parse(complainantname);
+        }
+
+        if (respondentname) {
+            updatedFields.respondentname = JSON.parse(respondentname);
+        }
 
         // If changing to "Archived", set `archived_at` to the current date
         if (status === 'Archived' && existingReport.status !== 'Archived') {
@@ -226,15 +278,16 @@ const updateIncidentReport = async (req, res) => {
             updatedFields.archived_at = null;
         }
 
-        // Update the incident report
+        // Update the incident report in the database
         const updatedReport = await IncidentReport.findByIdAndUpdate(
             reportId,
-            updatedFields,
+            { $set: updatedFields },
             { new: true, runValidators: true }
         );
 
         res.status(200).json({ message: "Incident report updated successfully", report: updatedReport });
     } catch (error) {
+        console.error("Error updating incident report:", error);
         res.status(500).json({ message: "Failed to update incident report", error: error.message });
     }
 };
