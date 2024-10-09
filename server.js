@@ -13,7 +13,7 @@ const server = http.createServer(app);
 
 // CORS setup for Express (still needed for React.js web)
 app.use(cors({
-  origin: ['http://localhost:3000'], // Web frontend URL (for React.js web)
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
